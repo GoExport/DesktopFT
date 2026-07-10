@@ -1,0 +1,65 @@
+{
+  "name": "FlashThemes",
+  "productName": "FlashThemes",
+  "version": "1.0.0",
+  "description": "Test",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "electron-forge start",
+    "dev": "electron-forge start --inspect-electron",
+    "package": "electron-forge package",
+    "make64": "electron-forge make",
+    "make32": "electron-forge make --arch=ia32",
+    "publish": "electron-forge publish",
+    "lint": "echo \"No linting configured\""
+  },
+  "keywords": [],
+  "author": {
+    "name": "dae",
+    "email": "notGoExport@gmail.com"
+  },
+  "license": "MIT",
+  "config": {
+    "forge": {
+      "packagerConfig": {},
+      "makers": [
+        {
+          "name": "@electron-forge/maker-squirrel",
+          "config": {
+            "name": "FlashThemes"
+          }
+        },
+        {
+          "name": "@electron-forge/maker-zip",
+          "platforms": [
+            "darwin"
+          ]
+        },
+        {
+          "name": "@electron-forge/maker-deb",
+          "config": {}
+        },
+        {
+          "name": "@electron-forge/maker-rpm",
+          "config": {}
+        }
+      ]
+    }
+  },
+  "dependencies": {
+    "electron-squirrel-startup": "^1.0.0"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "^6.0.0-beta.63",
+    "@electron-forge/maker-deb": "^6.0.0-beta.63",
+    "@electron-forge/maker-rpm": "^6.0.0-beta.63",
+    "@electron-forge/maker-squirrel": "^6.0.0-beta.63",
+    "@electron-forge/maker-zip": "^6.0.0-beta.63",
+    "electron": "^8.2.0"
+  },
+  "allowScripts": {
+    "electron@8.2.0": true,
+    "electron-winstaller@5.0.0": true,
+    "lzma-native@8.0.6": true
+  }
+}
