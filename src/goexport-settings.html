@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GoExport Settings</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: #1f1f1f;
+        color: #f5f5f5;
+      }
+
+      .container {
+        max-width: 640px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+
+      h1 {
+        margin: 0 0 10px;
+        color: #ffbc8d;
+      }
+
+      .subtitle {
+        margin: 0 0 18px;
+        color: #d6d6d6;
+      }
+
+      .card {
+        background: #2d2d2d;
+        border: 1px solid #444;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 14px;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+      }
+
+      select,
+      input[type="checkbox"] {
+        font-size: 14px;
+      }
+
+      select {
+        width: 100%;
+        padding: 10px;
+        border-radius: 6px;
+        border: 1px solid #5a5a5a;
+        background: #181818;
+        color: #f5f5f5;
+      }
+
+      .checkbox-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 20px;
+      }
+
+      button {
+        border: 0;
+        padding: 10px 18px;
+        border-radius: 6px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      #save {
+        background: #f47821;
+        color: #fff;
+      }
+
+      #status {
+        color: #8fd18f;
+        min-height: 20px;
+      }
+
+      .hint {
+        margin-top: 10px;
+        color: #b8b8b8;
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>GoExport Settings</h1>
+      <p class="subtitle">These settings are used for the Export with GoExport button.</p>
+
+      <div class="card">
+        <label for="aspectRatio">Aspect Ratio</label>
+        <select id="aspectRatio">
+          <option value="4:3">Standard (4:3)</option>
+          <option value="14:9">Classic (14:9)</option>
+          <option value="16:9">Widescreen (16:9)</option>
+          <option value="9:16">Vertical (9:16)</option>
+        </select>
+      </div>
+
+      <div class="card">
+        <label for="resolution">Resolution</label>
+        <select id="resolution"></select>
+      </div>
+
+      <div class="card">
+        <label class="checkbox-row" for="openFolder">
+          <input type="checkbox" id="openFolder" />
+          Open folder after export
+        </label>
+      </div>
+
+      <div class="card">
+        <label class="checkbox-row" for="useOutro">
+          <input type="checkbox" id="useOutro" />
+          Add outro to exported videos
+        </label>
+      </div>
+
+      <div class="card">
+        <label class="checkbox-row" for="requireOBS">
+          <input type="checkbox" id="requireOBS" />
+          Require OBS to be running
+        </label>
+      </div>
+
+      <div class="actions">
+        <button id="save">Save Settings</button>
+        <span id="status"></span>
+      </div>
+
+      <p class="hint">Tip: If a movie page is already open, the GoExport button will refresh with your new settings after save.</p>
+    </div>
+
+    <script>
+      const { ipcRenderer } = require("electron");
+
+      const resolutionOptions = {
+        "16:9": {
+          "360p": "360p",
+          "480p": "480p",
+          "720p": "720p (Recommended)",
+          "1080p": "1080p",
+          "2k": "2K",
+          "4k": "4K",
+          "5k": "5K",
+          "8k": "8K",
+        },
+        "14:9": {
+          "360p": "360p",
+          "480p": "480p",
+          "720p": "720p (Recommended)",
+          "1080p": "1080p",
+          "2k": "2K",
+          "4k": "4K",
+          "5k": "5K",
+          "8k": "8K",
+        },
+        "9:16": {
+          "360p": "360p",
+          "480p": "480p",
+          "720p": "720p (Recommended)",
+          "1080p": "1080p",
+          "2k": "2K",
+          "4k": "4K",
+          "5k": "5K",
+          "8k": "8K",
+        },
+        "4:3": {
+          "240p": "240p",
+          "360p": "360p",
+          "420p": "420p",
+          "480p": "480p (Recommended)",
+        },
+      };
+
+      function updateResolutionOptions(aspectRatio, currentResolution) {
+        const resolutionSelect = document.getElementById("resolution");
+        const options = resolutionOptions[aspectRatio] || resolutionOptions["16:9"];
+
+        resolutionSelect.innerHTML = "";
+
+        Object.entries(options).forEach(([value, label]) => {
+          const option = document.createElement("option");
+          option.value = value;
+          option.textContent = label;
+          resolutionSelect.appendChild(option);
+        });
+
+        const fallback = options["720p"] ? "720p" : Object.keys(options)[0];
+        resolutionSelect.value = options[currentResolution] ? currentResolution : fallback;
+      }
+
+      async function loadSettings() {
+        const settings = await ipcRenderer.invoke("desktopft:get-goexport-settings");
+
+        document.getElementById("aspectRatio").value = settings.aspectRatio;
+        updateResolutionOptions(settings.aspectRatio, settings.resolution);
+        document.getElementById("openFolder").checked = settings.openFolder;
+        document.getElementById("useOutro").checked = settings.useOutro;
+        document.getElementById("requireOBS").checked = settings.requireOBS;
+      }
+
+      async function saveSettings() {
+        const payload = {
+          aspectRatio: document.getElementById("aspectRatio").value,
+          resolution: document.getElementById("resolution").value,
+          openFolder: document.getElementById("openFolder").checked,
+          useOutro: document.getElementById("useOutro").checked,
+          requireOBS: document.getElementById("requireOBS").checked,
+        };
+
+        await ipcRenderer.invoke("desktopft:save-goexport-settings", payload);
+
+        const status = document.getElementById("status");
+        status.textContent = "Saved.";
+        setTimeout(() => {
+          status.textContent = "";
+        }, 1800);
+      }
+
+      document.addEventListener("DOMContentLoaded", () => {
+        document.getElementById("aspectRatio").addEventListener("change", (event) => {
+          const currentResolution = document.getElementById("resolution").value;
+          updateResolutionOptions(event.target.value, currentResolution);
+        });
+
+        document.getElementById("save").addEventListener("click", saveSettings);
+        loadSettings().catch((error) => {
+          const status = document.getElementById("status");
+          status.textContent = "Failed to load settings.";
+          console.error("GoExport settings load failed", error);
+        });
+      });
+    </script>
+  </body>
+</html>

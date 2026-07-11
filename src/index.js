@@ -1,4 +1,5 @@
-const { app, BrowserWindow, shell, Menu } = require("electron");
+const { app, BrowserWindow, shell, Menu, ipcMain } = require("electron");
+const fs = require("fs");
 const path = require("path");
 const gotTheLock = app.requestSingleInstanceLock();
 
@@ -49,9 +50,27 @@ let FVM_EDITOR_STICKLY_BUSINESS = "https://flashthemes.net/videomaker/sticklybiz
 let QVM_EDITOR_GENERAL = "https://flashthemes.net/create/#quickvideo";
 
 let win;
+let goExportSettingsWindow;
 const APP_SESSION_PARTITION = "persist:desktopft";
 const EDITOR_PATH_PATTERN = /\/videomaker\/.+\/full/i;
 const MOVIE_PATH_PATTERN = /\/movie\//i;
+const GOEXPORT_SETTINGS_PROTOCOL = "desktopft-goexport-settings://open";
+const GOEXPORT_SETTINGS_FILE = path.join(app.getPath("userData"), "goexport-settings.json");
+
+const DEFAULT_GOEXPORT_SETTINGS = {
+  aspectRatio: "16:9",
+  resolution: "720p",
+  openFolder: false,
+  useOutro: true,
+  requireOBS: false,
+};
+
+const GOEXPORT_RESOLUTION_OPTIONS = {
+  "16:9": ["360p", "480p", "720p", "1080p", "2k", "4k", "5k", "8k"],
+  "14:9": ["360p", "480p", "720p", "1080p", "2k", "4k", "5k", "8k"],
+  "9:16": ["360p", "480p", "720p", "1080p", "2k", "4k", "5k", "8k"],
+  "4:3": ["240p", "360p", "420p", "480p"],
+};
 
 const isFlashThemesUrl = (targetUrl) => {
   try {
@@ -66,57 +85,58 @@ const isFlashThemesUrl = (targetUrl) => {
   }
 };
 
-const buildEditorLayoutPatchScript = () => `
-;(() => {
-  const isEditor = /\\/videomaker\\/.+\\/full/i.test(location.pathname);
-  if (!isEditor) return;
+const isGoExportSettingsUrl = (targetUrl) => {
+  return typeof targetUrl === "string" && targetUrl.toLowerCase().startsWith(GOEXPORT_SETTINGS_PROTOCOL);
+};
 
-  const styleId = 'desktopft-editor-layout-fix';
-  let style = document.getElementById(styleId);
-  if (!style) {
-    style = document.createElement('style');
-    style.id = styleId;
-    document.head.appendChild(style);
-  }
+const sanitizeGoExportSettings = (inputSettings) => {
+  const incoming = inputSettings && typeof inputSettings === "object" ? inputSettings : {};
+  const aspectRatio = Object.prototype.hasOwnProperty.call(GOEXPORT_RESOLUTION_OPTIONS, incoming.aspectRatio)
+    ? incoming.aspectRatio
+    : DEFAULT_GOEXPORT_SETTINGS.aspectRatio;
 
-  style.textContent = [
-    'html, body { overflow: hidden !important; height: 100% !important; max-height: 100% !important; margin: 0 !important; padding: 0 !important; }',
-    '#studioBlock { height: 0 !important; min-height: 0 !important; }',
-    '.top-nav, .site-header, header { display: none !important; }',
-    '#studio_container { position: fixed !important; left: 0 !important; right: 0 !important; top: 0 !important; width: 100vw !important; height: 100vh !important; overflow: hidden !important; z-index: 1 !important; }',
-    '#previewPlayerContainer { position: fixed !important; inset: 0 !important; z-index: 10000 !important; }',
-    '#previewPlayer, #characterCreator { position: absolute !important; left: 50% !important; top: 60px !important; transform: translateX(-50%) !important; z-index: 10001 !important; margin: 0 !important; }',
-    '#previewPlayerContainer .blockUI.blockOverlay { position: fixed !important; inset: 0 !important; }',
-    '#studio_holder, #studio_holder object, #studio_holder embed, #studio_holder iframe { width: 100% !important; height: 100% !important; display: block !important; }',
-    '#studio_container .site-footer, .site-footer { display: none !important; }'
-  ].join('\\n');
+  const allowedResolutions = GOEXPORT_RESOLUTION_OPTIONS[aspectRatio] || GOEXPORT_RESOLUTION_OPTIONS[DEFAULT_GOEXPORT_SETTINGS.aspectRatio];
+  const resolution = allowedResolutions.includes(incoming.resolution)
+    ? incoming.resolution
+    : allowedResolutions.includes(DEFAULT_GOEXPORT_SETTINGS.resolution)
+      ? DEFAULT_GOEXPORT_SETTINGS.resolution
+      : allowedResolutions[0];
 
-  const syncPreviewMode = () => {
-    const studioContainer = document.getElementById('studio_container');
-    const previewContainer = document.getElementById('previewPlayerContainer');
-    const previewVisible = !!previewContainer && window.getComputedStyle(previewContainer).display !== 'none';
+  return {
+    aspectRatio,
+    resolution,
+    openFolder: Boolean(incoming.openFolder),
+    useOutro: typeof incoming.useOutro === "boolean" ? incoming.useOutro : DEFAULT_GOEXPORT_SETTINGS.useOutro,
+    requireOBS: Boolean(incoming.requireOBS),
+  };
+};
 
-    if (studioContainer) {
-      studioContainer.style.visibility = previewVisible ? 'hidden' : 'visible';
-      studioContainer.style.pointerEvents = previewVisible ? 'none' : 'auto';
+const readGoExportSettings = () => {
+  try {
+    if (!fs.existsSync(GOEXPORT_SETTINGS_FILE)) {
+      return { ...DEFAULT_GOEXPORT_SETTINGS };
     }
 
-    document.documentElement.style.overflow = 'hidden';
-    document.body.style.overflow = 'hidden';
-  };
-
-  syncPreviewMode();
-
-  const previewContainer = document.getElementById('previewPlayerContainer');
-  if (previewContainer) {
-    const observer = new MutationObserver(syncPreviewMode);
-    observer.observe(previewContainer, {
-      attributes: true,
-      attributeFilter: ['style', 'class']
-    });
+    const rawSettings = fs.readFileSync(GOEXPORT_SETTINGS_FILE, "utf8");
+    const parsed = JSON.parse(rawSettings);
+    return sanitizeGoExportSettings({ ...DEFAULT_GOEXPORT_SETTINGS, ...parsed });
+  } catch (error) {
+    console.error("[DesktopFT] Failed to read GoExport settings:", error);
+    return { ...DEFAULT_GOEXPORT_SETTINGS };
   }
-})();
-`;
+};
+
+const saveGoExportSettings = (nextSettings) => {
+  const sanitized = sanitizeGoExportSettings(nextSettings);
+
+  try {
+    fs.writeFileSync(GOEXPORT_SETTINGS_FILE, JSON.stringify(sanitized, null, 2), "utf8");
+  } catch (error) {
+    console.error("[DesktopFT] Failed to save GoExport settings:", error);
+  }
+
+  return sanitized;
+};
 
 const buildMovieDownloaderPatchScript = () => `
 ;(() => {
@@ -254,17 +274,240 @@ const buildMovieDownloaderPatchScript = () => `
 })();
 `;
 
+const buildGoExportNavbarPatchScript = () => `
+;(() => {
+  const navId = 'desktopft-goexport-settings-nav';
+  const navSelectors = [
+    '.top-nav ul',
+    '.top-nav .nav',
+    '.site-header .nav',
+    '.site-header ul',
+    '.navbar-nav',
+    '.navigation ul',
+    '#site-nav ul',
+    '#header ul',
+    'header nav ul',
+    'header nav',
+    '.top-nav'
+  ];
+
+  const createSettingsAnchor = () => {
+    const item = document.createElement('a');
+    item.id = navId;
+    item.href = '${GOEXPORT_SETTINGS_PROTOCOL}';
+    item.textContent = 'GoExport Settings';
+    item.style.marginLeft = '12px';
+    item.style.cursor = 'pointer';
+    item.style.textDecoration = 'none';
+    item.style.color = 'inherit';
+    item.style.fontWeight = '600';
+
+    item.addEventListener('click', (event) => {
+      event.preventDefault();
+      location.href = '${GOEXPORT_SETTINGS_PROTOCOL}';
+    });
+
+    return item;
+  };
+
+  const findNavContainer = () => {
+    for (let i = 0; i < navSelectors.length; i += 1) {
+      const found = document.querySelector(navSelectors[i]);
+      if (found) {
+        return found;
+      }
+    }
+
+    return null;
+  };
+
+  const injectSettingsNav = () => {
+    if (document.getElementById(navId)) {
+      return true;
+    }
+
+    const navContainer = findNavContainer();
+    if (!navContainer) {
+      return false;
+    }
+
+    const sampleLink = navContainer.querySelector('a');
+    const item = createSettingsAnchor();
+
+    if (sampleLink) {
+      item.className = sampleLink.className || '';
+    }
+
+    if (navContainer.tagName && navContainer.tagName.toLowerCase() === 'ul') {
+      const li = document.createElement('li');
+      li.style.listStyle = 'none';
+
+      const sampleLi = navContainer.querySelector('li');
+      if (sampleLi) {
+        li.className = sampleLi.className || '';
+      }
+
+      li.appendChild(item);
+      navContainer.appendChild(li);
+      return true;
+    }
+
+    navContainer.appendChild(item);
+    return true;
+  };
+
+  if (injectSettingsNav()) {
+    return;
+  }
+
+  const observer = new MutationObserver(() => {
+    if (injectSettingsNav()) {
+      observer.disconnect();
+    }
+  });
+
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+})();
+`;
+
+const buildGoExportMoviePatchScript = (settings) => {
+  const escapedSettings = JSON.stringify(settings)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e");
+
+  return `
+;(() => {
+  const isMoviePage = location.pathname.toLowerCase().indexOf('/movie/') !== -1;
+  if (!isMoviePage) return;
+
+  const settings = ${escapedSettings};
+
+  const gatherMovieData = () => {
+    const scripts = document.querySelectorAll('script');
+    const movieData = {};
+
+    for (let i = 0; i < scripts.length; i += 1) {
+      const scriptText = scripts[i].textContent || '';
+      if (scriptText.indexOf('flashvars') === -1) continue;
+
+      const match = scriptText.match(/flashvars\\s*:\\s*\\{([\\s\\S]*?)\\}\\s*\\}/);
+      if (!match) continue;
+
+      const objectBody = match[1];
+      const pairs = objectBody.match(/(\\w+):"([^"]*)"/g);
+      if (!pairs) continue;
+
+      for (let j = 0; j < pairs.length; j += 1) {
+        const parts = pairs[j].split(':');
+        const key = parts[0].trim();
+        const value = parts.slice(1).join(':').trim().replace(/^"|"$/g, '');
+        movieData[key] = value;
+      }
+
+      break;
+    }
+
+    return movieData;
+  };
+
+  const launchGoExport = (movieId, movieOwnerId, isWide) => {
+    const aspectRatio = settings.aspectRatio || (isWide === '1' ? '16:9' : '14:9');
+    const goExportUrl =
+      'goexport://?video_id=' + encodeURIComponent(movieId) +
+      '&user_id=' + encodeURIComponent(movieOwnerId) +
+      '&service=ft' +
+      '&no_input=1' +
+      '&aspect_ratio=' + encodeURIComponent(aspectRatio) +
+      '&resolution=' + encodeURIComponent(settings.resolution) +
+      '&open_folder=' + (settings.openFolder ? '1' : '0') +
+      '&use_outro=' + (settings.useOutro ? '1' : '0') +
+      '&obs_required=' + (settings.requireOBS ? '1' : '0');
+
+    location.href = goExportUrl;
+  };
+
+  const createGoExportButton = () => {
+    const container = document.querySelector('#movie_actions .actions');
+    if (!container) return;
+    if (document.getElementById('goexport_integration_button')) return;
+
+    const movieData = gatherMovieData();
+    const movieId = movieData.movieId;
+    const movieOwnerId = movieData.movieOwnerId;
+    const wide = movieData.isWide;
+
+    if (!movieId || !movieOwnerId) return;
+
+    const newButton = document.createElement('div');
+    newButton.className = 'movie_action_button';
+    newButton.id = 'goexport_integration_button';
+    newButton.addEventListener('click', () => launchGoExport(movieId, movieOwnerId, wide));
+
+    const tooltip = document.createElement('div');
+    tooltip.className = 'tooltip';
+    tooltip.textContent = 'Export with GoExport (' + settings.resolution + ')';
+    newButton.appendChild(tooltip);
+
+    container.appendChild(newButton);
+  };
+
+  createGoExportButton();
+
+  const observer = new MutationObserver(() => {
+    createGoExportButton();
+  });
+
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+})();
+`;
+};
+
+const applyEditorViewportFix = () => {
+  if (!win || win.isDestroyed()) {
+    return;
+  }
+
+  win.webContents
+    .insertCSS(
+      "html, body { height: 100% !important; margin: 0 !important; overflow: hidden !important; }"
+    )
+    .catch((error) => {
+      console.error("[DesktopFT] Editor viewport CSS injection failed:", error);
+    });
+};
+
+const openGoExportSettingsWindow = () => {
+  if (goExportSettingsWindow && !goExportSettingsWindow.isDestroyed()) {
+    goExportSettingsWindow.focus();
+    return;
+  }
+
+  goExportSettingsWindow = new BrowserWindow({
+    title: "GoExport Settings",
+    width: 560,
+    height: 700,
+    parent: win,
+    modal: false,
+    autoHideMenuBar: true,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+    },
+  });
+
+  goExportSettingsWindow.removeMenu();
+  goExportSettingsWindow.loadFile(path.join(__dirname, "goexport-settings.html"));
+
+  goExportSettingsWindow.on("closed", () => {
+    goExportSettingsWindow = null;
+  });
+};
+
 if (!gotTheLock) {
   app.quit();
 } else {
   const openInMainWindow = async (url) => {
     if (win && !win.isDestroyed()) {
-      try {
-        await win.webContents.executeJavaScript("window.onbeforeunload = null;");
-      } catch (error) {
-        // Ignore if script cannot run during early navigation states.
-      }
-
       win.loadURL(url);
       win.focus();
     }
@@ -299,6 +542,37 @@ if (!gotTheLock) {
           },
           {
             role: "forceReload",
+          },
+        ],
+      },
+      {
+        label: "View",
+        submenu: [
+          {
+            label: "Zoom In",
+            accelerator: "Ctrl+=",
+            role: "zoomIn",
+          },
+          {
+            label: "Zoom Out",
+            accelerator: "Ctrl+-",
+            role: "zoomOut",
+          },
+          {
+            label: "Actual Size",
+            accelerator: "Ctrl+0",
+            role: "resetZoom",
+          },
+        ],
+      },
+      {
+        label: "GoExport",
+        submenu: [
+          {
+            label: "Settings",
+            click: () => {
+              openGoExportSettingsWindow();
+            },
           },
         ],
       },
@@ -506,6 +780,11 @@ if (!gotTheLock) {
     win.webContents.on("new-window", (event, targetUrl) => {
       event.preventDefault();
 
+      if (isGoExportSettingsUrl(targetUrl)) {
+        openGoExportSettingsWindow();
+        return;
+      }
+
       if (isFlashThemesUrl(targetUrl)) {
         openInMainWindow(targetUrl);
         return;
@@ -516,6 +795,12 @@ if (!gotTheLock) {
 
     win.webContents.on("will-navigate", (event, targetUrl) => {
       if (targetUrl === win.webContents.getURL()) {
+        return;
+      }
+
+      if (isGoExportSettingsUrl(targetUrl)) {
+        event.preventDefault();
+        openGoExportSettingsWindow();
         return;
       }
 
@@ -533,14 +818,23 @@ if (!gotTheLock) {
     const patchPageEnhancementsIfNeeded = () => {
       const currentUrl = win.webContents.getURL();
       if (EDITOR_PATH_PATTERN.test(currentUrl)) {
-        win.webContents.executeJavaScript(buildEditorLayoutPatchScript()).catch((error) => {
-          console.error("[DesktopFT] Editor layout patch injection failed:", error);
+        applyEditorViewportFix();
+      }
+
+      if (isFlashThemesUrl(currentUrl)) {
+        win.webContents.executeJavaScript(buildGoExportNavbarPatchScript()).catch((error) => {
+          console.error("[DesktopFT] GoExport navbar patch injection failed:", error);
         });
       }
 
       if (MOVIE_PATH_PATTERN.test(currentUrl)) {
         win.webContents.executeJavaScript(buildMovieDownloaderPatchScript()).catch((error) => {
           console.error("[DesktopFT] Movie downloader patch injection failed:", error);
+        });
+
+        const goExportSettings = readGoExportSettings();
+        win.webContents.executeJavaScript(buildGoExportMoviePatchScript(goExportSettings)).catch((error) => {
+          console.error("[DesktopFT] GoExport movie patch injection failed:", error);
         });
       }
     };
@@ -614,6 +908,23 @@ if (!gotTheLock) {
 
   app.whenReady().then(() => {
     app.allowRendererProcessReuse = true;
+
+    ipcMain.handle("desktopft:get-goexport-settings", () => {
+      return readGoExportSettings();
+    });
+
+    ipcMain.handle("desktopft:save-goexport-settings", (event, incomingSettings) => {
+      const savedSettings = saveGoExportSettings(incomingSettings);
+
+      if (win && !win.isDestroyed() && MOVIE_PATH_PATTERN.test(win.webContents.getURL())) {
+        win.webContents.executeJavaScript("var button = document.getElementById('goexport_integration_button'); if (button) { button.remove(); }").catch(() => {});
+        win.webContents.executeJavaScript(buildGoExportMoviePatchScript(savedSettings)).catch((error) => {
+          console.error("[DesktopFT] GoExport movie patch refresh failed:", error);
+        });
+      }
+
+      return savedSettings;
+    });
 
     createMenu();
     createWindow();
