@@ -516,6 +516,217 @@ if (!gotTheLock) {
   const createMenu = () => {
     const template = [
       {
+        label: "FlashThemes",
+        submenu: [
+          {
+            label: "Home",
+            click: async () => {
+              win.loadURL(APP_URL);
+            },
+          },
+          { type: "separator" },
+          {
+            label: "GoExport Settings",
+            click: () => {
+              openGoExportSettingsWindow();
+            },
+          },
+        ],
+      },
+      {
+        label: "Dashboard",
+        submenu: [
+          {
+            label: "Home",
+            click: async () => {
+              win.loadURL(APP_HOME);
+            },
+          },
+          {
+            label: "Videos",
+            click: async () => {
+              win.loadURL(APP_VIDEOS);
+            },
+          },
+          {
+            label: "Messages",
+            click: async () => {
+              win.loadURL(APP_MESSAGES);
+            },
+          },
+          {
+            label: "Friends",
+            click: async () => {
+              win.loadURL(APP_FRIENDS);
+            },
+          },
+          {
+            label: "Badges",
+            click: async () => {
+              win.loadURL(APP_BADGES);
+            },
+          },
+          { type: "separator" },
+          {
+            label: "Explore Community",
+            click: async () => {
+              win.loadURL(APP_COMMUNITY);
+            },
+          },
+          {
+            label: "Explore Animations",
+            click: async () => {
+              win.loadURL(APP_ANIMATIONS);
+            },
+          },
+          {
+            label: "Shop",
+            click: async () => {
+              win.loadURL(APP_SHOP);
+            },
+          },
+          { type: "separator" },
+          {
+            label: "Logo",
+            click: async () => {
+              win.loadURL(APP_LOGO);
+            },
+          },
+          {
+            label: "Assets",
+            click: async () => {
+              win.loadURL(APP_ASSETS);
+            },
+          },
+          {
+            label: "Settings",
+            click: async () => {
+              win.loadURL(APP_SETTINGS);
+            },
+          },
+        ],
+      },
+      {
+        label: "Create",
+        submenu: [
+          {
+            label: "Comedy World",
+            click: async () => {
+              openInMainWindow(FVM_EDITOR_COMEDY_WORLD);
+            },
+          },
+          {
+            label: "Cartoon Classics",
+            click: async () => {
+              openInMainWindow(FVM_EDITOR_CARTOON_CLASSICS);
+            },
+          },
+          { type: "separator" },
+          {
+            label: "Anime",
+            click: async () => {
+              openInMainWindow(FVM_EDITOR_ANIME);
+            },
+          },
+          {
+            label: "Ninja Anime",
+            click: async () => {
+              openInMainWindow(FVM_EDITOR_NINJA_ANIME);
+            },
+          },
+          {
+            label: "Chibi Ninjas",
+            click: async () => {
+              openInMainWindow(FVM_EDITOR_CHIBI_NINJAS);
+            },
+          },
+          { type: "separator" },
+          {
+            label: "Space Citizens",
+            click: async () => {
+              openInMainWindow(FVM_EDITOR_SPACE_CITIZENS);
+            },
+          },
+          {
+            label: "Space Peepz",
+            click: async () => {
+              openInMainWindow(FVM_EDITOR_SPACE_PEEPZ);
+            },
+          },
+          { type: "separator" },
+          {
+            label: "Lil Peepz",
+            click: async () => {
+              openInMainWindow(FVM_EDITOR_LIL_PEEPZ);
+            },
+          },
+          {
+            label: "Lil Petz World",
+            click: async () => {
+              openInMainWindow(FVM_EDITOR_LIL_PETZ_WORLD);
+            },
+          },
+          {
+            label: "Chibi Peepz",
+            click: async () => {
+              openInMainWindow(FVM_EDITOR_CHIBI_PEEPZ);
+            },
+          },
+          { type: "separator" },
+          {
+            label: "Jungle Warfare",
+            click: async () => {
+              openInMainWindow(FVM_EDITOR_JUNGLE_WARFARE);
+            },
+          },
+          {
+            label: "Election 2012",
+            click: async () => {
+              openInMainWindow(FVM_EDITOR_ELECTION_2012);
+            },
+          },
+          {
+            label: "Stick Figure",
+            click: async () => {
+              openInMainWindow(FVM_EDITOR_STICK_FIGURE);
+            },
+          },
+          {
+            label: "Stickly Business",
+            click: async () => {
+              openInMainWindow(FVM_EDITOR_STICKLY_BUSINESS);
+            },
+          },
+          { type: "separator" },
+          {
+            label: "Quick Video Maker",
+            click: async () => {
+              openInMainWindow(QVM_EDITOR_GENERAL);
+            },
+          },
+        ],
+      },
+      {
+        label: "View",
+        submenu: [
+          {
+            label: "Zoom In",
+            accelerator: "Ctrl+=",
+            role: "zoomIn",
+          },
+          {
+            label: "Zoom Out",
+            accelerator: "Ctrl+-",
+            role: "zoomOut",
+          },
+          {
+            label: "Actual Size",
+            accelerator: "Ctrl+0",
+            role: "resetZoom",
+          },
+        ],
+      },
+      {
         label: "Developer",
         submenu: [
           {
@@ -542,219 +753,6 @@ if (!gotTheLock) {
           },
           {
             role: "forceReload",
-          },
-        ],
-      },
-      {
-        label: "View",
-        submenu: [
-          {
-            label: "Zoom In",
-            accelerator: "Ctrl+=",
-            role: "zoomIn",
-          },
-          {
-            label: "Zoom Out",
-            accelerator: "Ctrl+-",
-            role: "zoomOut",
-          },
-          {
-            label: "Actual Size",
-            accelerator: "Ctrl+0",
-            role: "resetZoom",
-          },
-        ],
-      },
-      {
-        label: "GoExport",
-        submenu: [
-          {
-            label: "Settings",
-            click: () => {
-              openGoExportSettingsWindow();
-            },
-          },
-        ],
-      },
-      {
-        label: "Home",
-        click: async () => {
-          win.loadURL(APP_URL);
-        },
-      },
-      {
-        label: "Dashboard",
-        submenu: [
-          {
-            label: "Home",
-            click: async () => {
-              win.loadURL(APP_HOME);
-            },
-          },
-          {
-            label: "Videos",
-            click: async () => {
-              win.loadURL(APP_VIDEOS);
-            },
-          },
-          {
-            label: "Badges",
-            click: async () => {
-              win.loadURL(APP_BADGES);
-            },
-          },
-          {
-            label: "Friends",
-            click: async () => {
-              win.loadURL(APP_FRIENDS);
-            },
-          },
-          {
-            label: "Messages",
-            click: async () => {
-              win.loadURL(APP_MESSAGES);
-            },
-          },
-          {
-            label: "Settings",
-            click: async () => {
-              win.loadURL(APP_SETTINGS);
-            },
-          },
-          {
-            label: "Logo",
-            click: async () => {
-              win.loadURL(APP_LOGO);
-            },
-          },
-          {
-            label: "Assets",
-            click: async () => {
-              win.loadURL(APP_ASSETS);
-            },
-          },
-        ],
-      },
-      {
-        label: "Explore",
-        submenu: [
-          {
-            label: "Animations",
-            click: async () => {
-              win.loadURL(APP_ANIMATIONS);
-            },
-          },
-          {
-            label: "Community",
-            click: async () => {
-              win.loadURL(APP_COMMUNITY);
-            },
-          },
-        ],
-      },
-      {
-        label: "Shop",
-        click: async () => {
-          win.loadURL(APP_SHOP);
-        },
-      },
-      {
-        label: "CREATE",
-        submenu: [
-          {
-            label: "Comedy World",
-            click: async () => {
-              openInMainWindow(FVM_EDITOR_COMEDY_WORLD);
-            },
-          },
-          { type: "separator" },
-          {
-            label: "Cartoon Classics",
-            click: async () => {
-              openInMainWindow(FVM_EDITOR_CARTOON_CLASSICS);
-            },
-          },
-          { type: "separator" },
-          {
-            label: "Anime",
-            click: async () => {
-              openInMainWindow(FVM_EDITOR_ANIME);
-            },
-          },
-          {
-            label: "Ninja Anime",
-            click: async () => {
-              openInMainWindow(FVM_EDITOR_NINJA_ANIME);
-            },
-          },
-          {
-            label: "Space Citizens",
-            click: async () => {
-              openInMainWindow(FVM_EDITOR_SPACE_CITIZENS);
-            },
-          },
-          { type: "separator" },
-          {
-            label: "Lil Peepz",
-            click: async () => {
-              openInMainWindow(FVM_EDITOR_LIL_PEEPZ);
-            },
-          },
-          {
-            label: "Lil Petz World",
-            click: async () => {
-              openInMainWindow(FVM_EDITOR_LIL_PETZ_WORLD);
-            },
-          },
-          {
-            label: "Chibi Ninjas",
-            click: async () => {
-              openInMainWindow(FVM_EDITOR_CHIBI_NINJAS);
-            },
-          },
-          {
-            label: "Chibi Peepz",
-            click: async () => {
-              openInMainWindow(FVM_EDITOR_CHIBI_PEEPZ);
-            },
-          },
-          {
-            label: "Space Peepz",
-            click: async () => {
-              openInMainWindow(FVM_EDITOR_SPACE_PEEPZ);
-            },
-          },
-          {
-            label: "Jungle Warfare",
-            click: async () => {
-              openInMainWindow(FVM_EDITOR_JUNGLE_WARFARE);
-            },
-          },
-          { type: "separator" },
-          {
-            label: "Election 2012",
-            click: async () => {
-              openInMainWindow(FVM_EDITOR_ELECTION_2012);
-            },
-          },
-          {
-            label: "Stick Figure",
-            click: async () => {
-              openInMainWindow(FVM_EDITOR_STICK_FIGURE);
-            },
-          },
-          {
-            label: "Stickly Business",
-            click: async () => {
-              openInMainWindow(FVM_EDITOR_STICKLY_BUSINESS);
-            },
-          },
-          { type: "separator" },
-          {
-            label: "Quick Video Maker",
-            click: async () => {
-              openInMainWindow(QVM_EDITOR_GENERAL);
-            },
           },
         ],
       },
@@ -916,11 +914,11 @@ if (!gotTheLock) {
     ipcMain.handle("desktopft:save-goexport-settings", (event, incomingSettings) => {
       const savedSettings = saveGoExportSettings(incomingSettings);
 
-      if (win && !win.isDestroyed() && MOVIE_PATH_PATTERN.test(win.webContents.getURL())) {
-        win.webContents.executeJavaScript("var button = document.getElementById('goexport_integration_button'); if (button) { button.remove(); }").catch(() => {});
-        win.webContents.executeJavaScript(buildGoExportMoviePatchScript(savedSettings)).catch((error) => {
-          console.error("[DesktopFT] GoExport movie patch refresh failed:", error);
-        });
+      if (win && !win.isDestroyed()) {
+        const currentUrl = win.webContents.getURL();
+        if (MOVIE_PATH_PATTERN.test(currentUrl)) {
+          win.webContents.reload();
+        }
       }
 
       return savedSettings;
