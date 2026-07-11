@@ -1,4 +1,4 @@
-![FlashThemes Desktop Logo](src\assets\background.png)
+![FlashThemes Desktop Logo](https://github.com/Lexian-droid/DesktopFT/blob/main/src/assets/background.png?raw=true)
 
 This is an **unofficial** desktop client for FlashThemes.net
 
