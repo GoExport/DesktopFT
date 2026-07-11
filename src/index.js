@@ -51,6 +51,7 @@ let QVM_EDITOR_GENERAL = "https://flashthemes.net/create/#quickvideo";
 let win;
 const APP_SESSION_PARTITION = "persist:desktopft";
 const EDITOR_PATH_PATTERN = /\/videomaker\/.+\/full/i;
+const MOVIE_PATH_PATTERN = /\/movie\//i;
 
 const isFlashThemesUrl = (targetUrl) => {
   try {
@@ -66,7 +67,7 @@ const isFlashThemesUrl = (targetUrl) => {
 };
 
 const buildEditorLayoutPatchScript = () => `
-(() => {
+;(() => {
   const isEditor = /\\/videomaker\\/.+\\/full/i.test(location.pathname);
   if (!isEditor) return;
 
@@ -117,6 +118,142 @@ const buildEditorLayoutPatchScript = () => `
 })();
 `;
 
+const buildMovieDownloaderPatchScript = () => `
+;(() => {
+  const isMoviePage = location.pathname.toLowerCase().indexOf('/movie/') !== -1;
+  if (!isMoviePage) return;
+
+  const getLoggedInUsername = () => {
+    const selectors = [
+      '#usernameheader',
+      'a[href*="/user/"]',
+      '.dropdown-toggle .username',
+      '#header_profile_username'
+    ];
+
+    for (let i = 0; i < selectors.length; i += 1) {
+      const el = document.querySelector(selectors[i]);
+      if (el && el.textContent && el.textContent.trim()) {
+        return el.textContent.trim();
+      }
+    }
+
+    return null;
+  };
+
+  const gatherMovieData = () => {
+    const scripts = document.querySelectorAll('script');
+    const movieData = {};
+
+    for (let i = 0; i < scripts.length; i += 1) {
+      const scriptText = scripts[i].textContent || '';
+      if (scriptText.indexOf('flashvars') === -1) {
+        continue;
+      }
+
+      const match = scriptText.match(/flashvars\\s*:\\s*\\{([\\s\\S]*?)\\}\\s*\\}/);
+      if (!match) {
+        continue;
+      }
+
+      const objectBody = match[1];
+      const pairs = objectBody.match(/(\\w+):\"([^\"]*)\"/g);
+      if (!pairs) {
+        continue;
+      }
+
+      for (let j = 0; j < pairs.length; j += 1) {
+        const parts = pairs[j].split(':');
+        const key = parts[0].trim();
+        const value = parts.slice(1).join(':').trim().replace(/^\"|\"$/g, '');
+        movieData[key] = value;
+      }
+
+      break;
+    }
+
+    return movieData;
+  };
+
+  const createDownloadMovieZipButton = () => {
+    const container = document.querySelector('#movie_actions .actions');
+    if (!container) return;
+
+    if (document.getElementById('desktopft-download-movie-zip')) return;
+
+    const movieData = gatherMovieData();
+    const movieOwner = movieData.movieOwner;
+    const loggedInUser = getLoggedInUsername();
+
+    // Match ownership exactly as the site does (case-sensitive and character-sensitive).
+    if (!movieOwner || !loggedInUser || movieOwner !== loggedInUser) {
+      return;
+    }
+
+    const newButton = document.createElement('div');
+    newButton.className = 'movie_action_button';
+    newButton.id = 'desktopft-download-movie-zip';
+    newButton.addEventListener('click', async () => {
+      const movieId = movieData.movieId;
+      const movieOwnerId = movieData.movieOwnerId;
+      if (!movieId || !movieOwnerId) {
+        alert('Could not extract movie ID or owner ID.');
+        return;
+      }
+
+      const url = 'https://flashthemes.net/goapi/getMovie/?userId=' +
+        encodeURIComponent(movieOwnerId) +
+        '&movieId=' +
+        encodeURIComponent(movieId);
+
+      const options = {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded'
+        },
+        body: new URLSearchParams({ userId: movieOwnerId, movieId })
+      };
+
+      try {
+        const response = await fetch(url, options);
+        if (!response.ok) throw new Error('Network response was not ok');
+        const blob = await response.blob();
+        const arrayBuffer = await blob.arrayBuffer();
+
+        // FlashThemes payload includes a leading byte that breaks extracted zip tools.
+        const fixedBuffer = arrayBuffer.slice(1);
+        const fixedBlob = new Blob([fixedBuffer], { type: blob.type || 'application/zip' });
+
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(fixedBlob);
+        link.download = 'movie.zip';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(link.href);
+      } catch (error) {
+        alert('Failed to download movie.zip: ' + error);
+      }
+    });
+
+    const tooltip = document.createElement('div');
+    tooltip.className = 'tooltip';
+    tooltip.textContent = 'Download movie.zip';
+    newButton.appendChild(tooltip);
+
+    container.appendChild(newButton);
+  };
+
+  createDownloadMovieZipButton();
+
+  const observer = new MutationObserver(() => {
+    createDownloadMovieZipButton();
+  });
+
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+})();
+`;
+
 if (!gotTheLock) {
   app.quit();
 } else {
@@ -135,6 +272,36 @@ if (!gotTheLock) {
 
   const createMenu = () => {
     const template = [
+      {
+        label: "Developer",
+        submenu: [
+          {
+            label: "Toggle DevTools",
+            accelerator: "F12",
+            click: () => {
+              if (win && !win.isDestroyed()) {
+                win.webContents.toggleDevTools();
+              }
+            },
+          },
+          {
+            label: "Open DevTools (Detached)",
+            accelerator: "Ctrl+Shift+I",
+            click: () => {
+              if (win && !win.isDestroyed()) {
+                win.webContents.openDevTools({ mode: "detach" });
+              }
+            },
+          },
+          { type: "separator" },
+          {
+            role: "reload",
+          },
+          {
+            role: "forceReload",
+          },
+        ],
+      },
       {
         label: "Home",
         click: async () => {
@@ -328,7 +495,9 @@ if (!gotTheLock) {
       icon: "/build/icon.ico",
       autoHideMenuBar: false,
       webPreferences: {
+        nodeIntegration: false,
         contextIsolation: true,
+        enableRemoteModule: false,
         plugins: true,
         partition: APP_SESSION_PARTITION,
       },
@@ -361,15 +530,23 @@ if (!gotTheLock) {
       event.preventDefault();
     });
 
-    const patchEditorLayoutIfNeeded = () => {
+    const patchPageEnhancementsIfNeeded = () => {
       const currentUrl = win.webContents.getURL();
       if (EDITOR_PATH_PATTERN.test(currentUrl)) {
-        win.webContents.executeJavaScript(buildEditorLayoutPatchScript()).catch(() => {});
+        win.webContents.executeJavaScript(buildEditorLayoutPatchScript()).catch((error) => {
+          console.error("[DesktopFT] Editor layout patch injection failed:", error);
+        });
+      }
+
+      if (MOVIE_PATH_PATTERN.test(currentUrl)) {
+        win.webContents.executeJavaScript(buildMovieDownloaderPatchScript()).catch((error) => {
+          console.error("[DesktopFT] Movie downloader patch injection failed:", error);
+        });
       }
     };
 
-    win.webContents.on("did-finish-load", patchEditorLayoutIfNeeded);
-    win.webContents.on("dom-ready", patchEditorLayoutIfNeeded);
+    win.webContents.on("did-finish-load", patchPageEnhancementsIfNeeded);
+    win.webContents.on("dom-ready", patchPageEnhancementsIfNeeded);
 
     win.webContents.on("context-menu", (event, params) => {
       Menu.getApplicationMenu().popup(win, params.x, params.y);
