@@ -206,8 +206,33 @@
         resolutionSelect.value = options[currentResolution] ? currentResolution : fallback;
       }
 
+      function invokeCompat(channel, payload) {
+        if (typeof ipcRenderer.invoke === "function") {
+          return ipcRenderer.invoke(channel, payload);
+        }
+
+        return new Promise((resolve, reject) => {
+          const requestId = Date.now() + "-" + Math.random().toString(16).slice(2);
+          const responseChannel = `${channel}:response:${requestId}`;
+
+          ipcRenderer.once(responseChannel, (event, response) => {
+            if (!response || response.ok === false) {
+              reject(new Error((response && response.error) || "IPC request failed"));
+              return;
+            }
+
+            resolve(response.data);
+          });
+
+          ipcRenderer.send(channel, {
+            payload,
+            responseChannel,
+          });
+        });
+      }
+
       async function loadSettings() {
-        const settings = await ipcRenderer.invoke("desktopft:get-goexport-settings");
+        const settings = await invokeCompat("desktopft:get-goexport-settings");
 
         document.getElementById("aspectRatio").value = settings.aspectRatio;
         updateResolutionOptions(settings.aspectRatio, settings.resolution);
@@ -225,7 +250,7 @@
           requireOBS: document.getElementById("requireOBS").checked,
         };
 
-        await ipcRenderer.invoke("desktopft:save-goexport-settings", payload);
+        await invokeCompat("desktopft:save-goexport-settings", payload);
 
         const status = document.getElementById("status");
         status.textContent = "Saved.";
