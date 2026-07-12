@@ -1,5 +1,4 @@
-const { app, BrowserWindow, shell, Menu, ipcMain } = require("electron");
-const fs = require("fs");
+const { app, BrowserWindow, shell, Menu } = require("electron");
 const path = require("path");
 const gotTheLock = app.requestSingleInstanceLock();
 
@@ -50,27 +49,9 @@ let FVM_EDITOR_STICKLY_BUSINESS = "https://flashthemes.net/videomaker/sticklybiz
 let QVM_EDITOR_GENERAL = "https://flashthemes.net/create/#quickvideo";
 
 let win;
-let goExportSettingsWindow;
 const APP_SESSION_PARTITION = "persist:desktopft";
 const EDITOR_PATH_PATTERN = /\/videomaker\/.+\/full/i;
 const MOVIE_PATH_PATTERN = /\/movie\//i;
-const GOEXPORT_SETTINGS_PROTOCOL = "desktopft-goexport-settings://open";
-const GOEXPORT_SETTINGS_FILE = path.join(app.getPath("userData"), "goexport-settings.json");
-
-const DEFAULT_GOEXPORT_SETTINGS = {
-  aspectRatio: "16:9",
-  resolution: "720p",
-  openFolder: false,
-  useOutro: true,
-  requireOBS: false,
-};
-
-const GOEXPORT_RESOLUTION_OPTIONS = {
-  "16:9": ["360p", "480p", "720p", "1080p", "2k", "4k", "5k", "8k"],
-  "14:9": ["360p", "480p", "720p", "1080p", "2k", "4k", "5k", "8k"],
-  "9:16": ["360p", "480p", "720p", "1080p", "2k", "4k", "5k", "8k"],
-  "4:3": ["240p", "360p", "420p", "480p"],
-};
 
 const isFlashThemesUrl = (targetUrl) => {
   try {
@@ -83,59 +64,6 @@ const isFlashThemesUrl = (targetUrl) => {
   } catch (error) {
     return false;
   }
-};
-
-const isGoExportSettingsUrl = (targetUrl) => {
-  return typeof targetUrl === "string" && targetUrl.toLowerCase().startsWith(GOEXPORT_SETTINGS_PROTOCOL);
-};
-
-const sanitizeGoExportSettings = (inputSettings) => {
-  const incoming = inputSettings && typeof inputSettings === "object" ? inputSettings : {};
-  const aspectRatio = Object.prototype.hasOwnProperty.call(GOEXPORT_RESOLUTION_OPTIONS, incoming.aspectRatio)
-    ? incoming.aspectRatio
-    : DEFAULT_GOEXPORT_SETTINGS.aspectRatio;
-
-  const allowedResolutions = GOEXPORT_RESOLUTION_OPTIONS[aspectRatio] || GOEXPORT_RESOLUTION_OPTIONS[DEFAULT_GOEXPORT_SETTINGS.aspectRatio];
-  const resolution = allowedResolutions.includes(incoming.resolution)
-    ? incoming.resolution
-    : allowedResolutions.includes(DEFAULT_GOEXPORT_SETTINGS.resolution)
-      ? DEFAULT_GOEXPORT_SETTINGS.resolution
-      : allowedResolutions[0];
-
-  return {
-    aspectRatio,
-    resolution,
-    openFolder: Boolean(incoming.openFolder),
-    useOutro: typeof incoming.useOutro === "boolean" ? incoming.useOutro : DEFAULT_GOEXPORT_SETTINGS.useOutro,
-    requireOBS: Boolean(incoming.requireOBS),
-  };
-};
-
-const readGoExportSettings = () => {
-  try {
-    if (!fs.existsSync(GOEXPORT_SETTINGS_FILE)) {
-      return { ...DEFAULT_GOEXPORT_SETTINGS };
-    }
-
-    const rawSettings = fs.readFileSync(GOEXPORT_SETTINGS_FILE, "utf8");
-    const parsed = JSON.parse(rawSettings);
-    return sanitizeGoExportSettings({ ...DEFAULT_GOEXPORT_SETTINGS, ...parsed });
-  } catch (error) {
-    console.error("[DesktopFT] Failed to read GoExport settings:", error);
-    return { ...DEFAULT_GOEXPORT_SETTINGS };
-  }
-};
-
-const saveGoExportSettings = (nextSettings) => {
-  const sanitized = sanitizeGoExportSettings(nextSettings);
-
-  try {
-    fs.writeFileSync(GOEXPORT_SETTINGS_FILE, JSON.stringify(sanitized, null, 2), "utf8");
-  } catch (error) {
-    console.error("[DesktopFT] Failed to save GoExport settings:", error);
-  }
-
-  return sanitized;
 };
 
 const buildMovieDownloaderPatchScript = () => `
@@ -274,232 +202,70 @@ const buildMovieDownloaderPatchScript = () => `
 })();
 `;
 
-const buildGoExportNavbarPatchScript = () => `
+const buildEditorViewportFixScript = () => `
 ;(() => {
-  const navId = 'desktopft-goexport-settings-nav';
-  const navSelectors = [
-    '.top-nav ul',
-    '.top-nav .nav',
-    '.site-header .nav',
-    '.site-header ul',
-    '.navbar-nav',
-    '.navigation ul',
-    '#site-nav ul',
-    '#header ul',
-    'header nav ul',
-    'header nav',
-    '.top-nav'
-  ];
+  if (window.__desktopftEditorOverflowHooked) {
+    return;
+  }
+  window.__desktopftEditorOverflowHooked = true;
 
-  const createSettingsAnchor = () => {
-    const item = document.createElement('a');
-    item.id = navId;
-    item.href = '${GOEXPORT_SETTINGS_PROTOCOL}';
-    item.textContent = 'GoExport Settings';
-    item.style.marginLeft = '12px';
-    item.style.cursor = 'pointer';
-    item.style.textDecoration = 'none';
-    item.style.color = 'inherit';
-    item.style.fontWeight = '600';
+  const styleId = 'desktopft-editor-overflow-fix';
 
-    item.addEventListener('click', (event) => {
-      event.preventDefault();
-      location.href = '${GOEXPORT_SETTINGS_PROTOCOL}';
-    });
-
-    return item;
+  const ensureStyle = () => {
+    let style = document.getElementById(styleId);
+    if (!style) {
+      style = document.createElement('style');
+      style.id = styleId;
+      document.head.appendChild(style);
+    }
+    return style;
   };
 
-  const findNavContainer = () => {
-    for (let i = 0; i < navSelectors.length; i += 1) {
-      const found = document.querySelector(navSelectors[i]);
-      if (found) {
-        return found;
-      }
-    }
-
-    return null;
-  };
-
-  const injectSettingsNav = () => {
-    if (document.getElementById(navId)) {
-      return true;
-    }
-
-    const navContainer = findNavContainer();
-    if (!navContainer) {
+  const isStudioHidden = () => {
+    const studio = document.getElementById('studio_container');
+    if (!studio) {
       return false;
     }
 
-    const sampleLink = navContainer.querySelector('a');
-    const item = createSettingsAnchor();
+    const inlineTop = (studio.style.top || '').trim();
+    const inlineWidth = (studio.style.width || '').trim();
+    const inlineHeight = (studio.style.height || '').trim();
 
-    if (sampleLink) {
-      item.className = sampleLink.className || '';
-    }
-
-    if (navContainer.tagName && navContainer.tagName.toLowerCase() === 'ul') {
-      const li = document.createElement('li');
-      li.style.listStyle = 'none';
-
-      const sampleLi = navContainer.querySelector('li');
-      if (sampleLi) {
-        li.className = sampleLi.className || '';
-      }
-
-      li.appendChild(item);
-      navContainer.appendChild(li);
-      return true;
-    }
-
-    navContainer.appendChild(item);
-    return true;
+    return inlineTop === '0px' && inlineWidth === '1px' && inlineHeight === '1px';
   };
 
-  if (injectSettingsNav()) {
-    return;
-  }
+  const applyOverflowMode = () => {
+    const style = ensureStyle();
+    if (isStudioHidden()) {
+      style.textContent = 'html, body { margin: 0 !important; overflow-y: auto !important; overflow-x: hidden !important; }';
+      return;
+    }
+
+    style.textContent = 'html, body { height: 100% !important; margin: 0 !important; overflow: hidden !important; }';
+  };
+
+  applyOverflowMode();
 
   const observer = new MutationObserver(() => {
-    if (injectSettingsNav()) {
-      observer.disconnect();
-    }
+    applyOverflowMode();
   });
 
-  observer.observe(document.documentElement, { childList: true, subtree: true });
-})();
-`;
-
-const buildGoExportMoviePatchScript = (settings) => {
-  const escapedSettings = JSON.stringify(settings)
-    .replace(/</g, "\\u003c")
-    .replace(/>/g, "\\u003e");
-
-  return `
-;(() => {
-  const isMoviePage = location.pathname.toLowerCase().indexOf('/movie/') !== -1;
-  if (!isMoviePage) return;
-
-  const settings = ${escapedSettings};
-
-  const gatherMovieData = () => {
-    const scripts = document.querySelectorAll('script');
-    const movieData = {};
-
-    for (let i = 0; i < scripts.length; i += 1) {
-      const scriptText = scripts[i].textContent || '';
-      if (scriptText.indexOf('flashvars') === -1) continue;
-
-      const match = scriptText.match(/flashvars\\s*:\\s*\\{([\\s\\S]*?)\\}\\s*\\}/);
-      if (!match) continue;
-
-      const objectBody = match[1];
-      const pairs = objectBody.match(/(\\w+):"([^"]*)"/g);
-      if (!pairs) continue;
-
-      for (let j = 0; j < pairs.length; j += 1) {
-        const parts = pairs[j].split(':');
-        const key = parts[0].trim();
-        const value = parts.slice(1).join(':').trim().replace(/^"|"$/g, '');
-        movieData[key] = value;
-      }
-
-      break;
-    }
-
-    return movieData;
-  };
-
-  const launchGoExport = (movieId, movieOwnerId, isWide) => {
-    const aspectRatio = settings.aspectRatio || (isWide === '1' ? '16:9' : '14:9');
-    const goExportUrl =
-      'goexport://?video_id=' + encodeURIComponent(movieId) +
-      '&user_id=' + encodeURIComponent(movieOwnerId) +
-      '&service=ft' +
-      '&no_input=1' +
-      '&aspect_ratio=' + encodeURIComponent(aspectRatio) +
-      '&resolution=' + encodeURIComponent(settings.resolution) +
-      '&open_folder=' + (settings.openFolder ? '1' : '0') +
-      '&use_outro=' + (settings.useOutro ? '1' : '0') +
-      '&obs_required=' + (settings.requireOBS ? '1' : '0');
-
-    location.href = goExportUrl;
-  };
-
-  const createGoExportButton = () => {
-    const container = document.querySelector('#movie_actions .actions');
-    if (!container) return;
-    if (document.getElementById('goexport_integration_button')) return;
-
-    const movieData = gatherMovieData();
-    const movieId = movieData.movieId;
-    const movieOwnerId = movieData.movieOwnerId;
-    const wide = movieData.isWide;
-
-    if (!movieId || !movieOwnerId) return;
-
-    const newButton = document.createElement('div');
-    newButton.className = 'movie_action_button';
-    newButton.id = 'goexport_integration_button';
-    newButton.addEventListener('click', () => launchGoExport(movieId, movieOwnerId, wide));
-
-    const tooltip = document.createElement('div');
-    tooltip.className = 'tooltip';
-    tooltip.textContent = 'Export with GoExport (' + settings.resolution + ')';
-    newButton.appendChild(tooltip);
-
-    container.appendChild(newButton);
-  };
-
-  createGoExportButton();
-
-  const observer = new MutationObserver(() => {
-    createGoExportButton();
+  observer.observe(document.documentElement, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ['style', 'class']
   });
-
-  observer.observe(document.documentElement, { childList: true, subtree: true });
 })();
 `;
-};
 
 const applyEditorViewportFix = () => {
   if (!win || win.isDestroyed()) {
     return;
   }
 
-  win.webContents
-    .insertCSS(
-      "html, body { height: 100% !important; margin: 0 !important; overflow: hidden !important; }"
-    )
-    .catch((error) => {
-      console.error("[DesktopFT] Editor viewport CSS injection failed:", error);
-    });
-};
-
-const openGoExportSettingsWindow = () => {
-  if (goExportSettingsWindow && !goExportSettingsWindow.isDestroyed()) {
-    goExportSettingsWindow.focus();
-    return;
-  }
-
-  goExportSettingsWindow = new BrowserWindow({
-    title: "GoExport Settings",
-    width: 560,
-    height: 700,
-    parent: win,
-    modal: false,
-    autoHideMenuBar: true,
-    webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
-    },
-  });
-
-  goExportSettingsWindow.removeMenu();
-  goExportSettingsWindow.loadFile(path.join(__dirname, "goexport-settings.html"));
-
-  goExportSettingsWindow.on("closed", () => {
-    goExportSettingsWindow = null;
+  win.webContents.executeJavaScript(buildEditorViewportFixScript()).catch((error) => {
+    console.error("[DesktopFT] Editor viewport fix injection failed:", error);
   });
 };
 
@@ -515,217 +281,6 @@ if (!gotTheLock) {
 
   const createMenu = () => {
     const template = [
-      {
-        label: "FlashThemes",
-        submenu: [
-          {
-            label: "Home",
-            click: async () => {
-              win.loadURL(APP_URL);
-            },
-          },
-          { type: "separator" },
-          {
-            label: "GoExport Settings",
-            click: () => {
-              openGoExportSettingsWindow();
-            },
-          },
-        ],
-      },
-      {
-        label: "Dashboard",
-        submenu: [
-          {
-            label: "Home",
-            click: async () => {
-              win.loadURL(APP_HOME);
-            },
-          },
-          {
-            label: "Videos",
-            click: async () => {
-              win.loadURL(APP_VIDEOS);
-            },
-          },
-          {
-            label: "Messages",
-            click: async () => {
-              win.loadURL(APP_MESSAGES);
-            },
-          },
-          {
-            label: "Friends",
-            click: async () => {
-              win.loadURL(APP_FRIENDS);
-            },
-          },
-          {
-            label: "Badges",
-            click: async () => {
-              win.loadURL(APP_BADGES);
-            },
-          },
-          { type: "separator" },
-          {
-            label: "Explore Community",
-            click: async () => {
-              win.loadURL(APP_COMMUNITY);
-            },
-          },
-          {
-            label: "Explore Animations",
-            click: async () => {
-              win.loadURL(APP_ANIMATIONS);
-            },
-          },
-          {
-            label: "Shop",
-            click: async () => {
-              win.loadURL(APP_SHOP);
-            },
-          },
-          { type: "separator" },
-          {
-            label: "Logo",
-            click: async () => {
-              win.loadURL(APP_LOGO);
-            },
-          },
-          {
-            label: "Assets",
-            click: async () => {
-              win.loadURL(APP_ASSETS);
-            },
-          },
-          {
-            label: "Settings",
-            click: async () => {
-              win.loadURL(APP_SETTINGS);
-            },
-          },
-        ],
-      },
-      {
-        label: "Create",
-        submenu: [
-          {
-            label: "Comedy World",
-            click: async () => {
-              openInMainWindow(FVM_EDITOR_COMEDY_WORLD);
-            },
-          },
-          {
-            label: "Cartoon Classics",
-            click: async () => {
-              openInMainWindow(FVM_EDITOR_CARTOON_CLASSICS);
-            },
-          },
-          { type: "separator" },
-          {
-            label: "Anime",
-            click: async () => {
-              openInMainWindow(FVM_EDITOR_ANIME);
-            },
-          },
-          {
-            label: "Ninja Anime",
-            click: async () => {
-              openInMainWindow(FVM_EDITOR_NINJA_ANIME);
-            },
-          },
-          {
-            label: "Chibi Ninjas",
-            click: async () => {
-              openInMainWindow(FVM_EDITOR_CHIBI_NINJAS);
-            },
-          },
-          { type: "separator" },
-          {
-            label: "Space Citizens",
-            click: async () => {
-              openInMainWindow(FVM_EDITOR_SPACE_CITIZENS);
-            },
-          },
-          {
-            label: "Space Peepz",
-            click: async () => {
-              openInMainWindow(FVM_EDITOR_SPACE_PEEPZ);
-            },
-          },
-          { type: "separator" },
-          {
-            label: "Lil Peepz",
-            click: async () => {
-              openInMainWindow(FVM_EDITOR_LIL_PEEPZ);
-            },
-          },
-          {
-            label: "Lil Petz World",
-            click: async () => {
-              openInMainWindow(FVM_EDITOR_LIL_PETZ_WORLD);
-            },
-          },
-          {
-            label: "Chibi Peepz",
-            click: async () => {
-              openInMainWindow(FVM_EDITOR_CHIBI_PEEPZ);
-            },
-          },
-          { type: "separator" },
-          {
-            label: "Jungle Warfare",
-            click: async () => {
-              openInMainWindow(FVM_EDITOR_JUNGLE_WARFARE);
-            },
-          },
-          {
-            label: "Election 2012",
-            click: async () => {
-              openInMainWindow(FVM_EDITOR_ELECTION_2012);
-            },
-          },
-          {
-            label: "Stick Figure",
-            click: async () => {
-              openInMainWindow(FVM_EDITOR_STICK_FIGURE);
-            },
-          },
-          {
-            label: "Stickly Business",
-            click: async () => {
-              openInMainWindow(FVM_EDITOR_STICKLY_BUSINESS);
-            },
-          },
-          { type: "separator" },
-          {
-            label: "Quick Video Maker",
-            click: async () => {
-              openInMainWindow(QVM_EDITOR_GENERAL);
-            },
-          },
-        ],
-      },
-      {
-        label: "View",
-        submenu: [
-          {
-            label: "Zoom In",
-            accelerator: "Ctrl+=",
-            role: "zoomIn",
-          },
-          {
-            label: "Zoom Out",
-            accelerator: "Ctrl+-",
-            role: "zoomOut",
-          },
-          {
-            label: "Actual Size",
-            accelerator: "Ctrl+0",
-            role: "resetZoom",
-          },
-        ],
-      },
       {
         label: "Developer",
         submenu: [
@@ -756,6 +311,208 @@ if (!gotTheLock) {
           },
         ],
       },
+      {
+        label: "View",
+        submenu: [
+          {
+            label: "Zoom In",
+            accelerator: "Ctrl+=",
+            role: "zoomIn",
+          },
+          {
+            label: "Zoom Out",
+            accelerator: "Ctrl+-",
+            role: "zoomOut",
+          },
+          {
+            label: "Actual Size",
+            accelerator: "Ctrl+0",
+            role: "resetZoom",
+          },
+        ],
+      },
+      {
+        label: "Home",
+        click: async () => {
+          win.loadURL(APP_URL);
+        },
+      },
+      {
+        label: "Dashboard",
+        submenu: [
+          {
+            label: "Home",
+            click: async () => {
+              win.loadURL(APP_HOME);
+            },
+          },
+          {
+            label: "Videos",
+            click: async () => {
+              win.loadURL(APP_VIDEOS);
+            },
+          },
+          {
+            label: "Badges",
+            click: async () => {
+              win.loadURL(APP_BADGES);
+            },
+          },
+          {
+            label: "Friends",
+            click: async () => {
+              win.loadURL(APP_FRIENDS);
+            },
+          },
+          {
+            label: "Messages",
+            click: async () => {
+              win.loadURL(APP_MESSAGES);
+            },
+          },
+          {
+            label: "Settings",
+            click: async () => {
+              win.loadURL(APP_SETTINGS);
+            },
+          },
+          {
+            label: "Logo",
+            click: async () => {
+              win.loadURL(APP_LOGO);
+            },
+          },
+          {
+            label: "Assets",
+            click: async () => {
+              win.loadURL(APP_ASSETS);
+            },
+          },
+        ],
+      },
+      {
+        label: "Explore",
+        submenu: [
+          {
+            label: "Animations",
+            click: async () => {
+              win.loadURL(APP_ANIMATIONS);
+            },
+          },
+          {
+            label: "Community",
+            click: async () => {
+              win.loadURL(APP_COMMUNITY);
+            },
+          },
+        ],
+      },
+      {
+        label: "Shop",
+        click: async () => {
+          win.loadURL(APP_SHOP);
+        },
+      },
+      {
+        label: "CREATE",
+        submenu: [
+          {
+            label: "Comedy World",
+            click: async () => {
+              openInMainWindow(FVM_EDITOR_COMEDY_WORLD);
+            },
+          },
+          { type: "separator" },
+          {
+            label: "Cartoon Classics",
+            click: async () => {
+              openInMainWindow(FVM_EDITOR_CARTOON_CLASSICS);
+            },
+          },
+          { type: "separator" },
+          {
+            label: "Anime",
+            click: async () => {
+              openInMainWindow(FVM_EDITOR_ANIME);
+            },
+          },
+          {
+            label: "Ninja Anime",
+            click: async () => {
+              openInMainWindow(FVM_EDITOR_NINJA_ANIME);
+            },
+          },
+          {
+            label: "Space Citizens",
+            click: async () => {
+              openInMainWindow(FVM_EDITOR_SPACE_CITIZENS);
+            },
+          },
+          { type: "separator" },
+          {
+            label: "Lil Peepz",
+            click: async () => {
+              openInMainWindow(FVM_EDITOR_LIL_PEEPZ);
+            },
+          },
+          {
+            label: "Lil Petz World",
+            click: async () => {
+              openInMainWindow(FVM_EDITOR_LIL_PETZ_WORLD);
+            },
+          },
+          {
+            label: "Chibi Ninjas",
+            click: async () => {
+              openInMainWindow(FVM_EDITOR_CHIBI_NINJAS);
+            },
+          },
+          {
+            label: "Chibi Peepz",
+            click: async () => {
+              openInMainWindow(FVM_EDITOR_CHIBI_PEEPZ);
+            },
+          },
+          {
+            label: "Space Peepz",
+            click: async () => {
+              openInMainWindow(FVM_EDITOR_SPACE_PEEPZ);
+            },
+          },
+          {
+            label: "Jungle Warfare",
+            click: async () => {
+              openInMainWindow(FVM_EDITOR_JUNGLE_WARFARE);
+            },
+          },
+          { type: "separator" },
+          {
+            label: "Election 2012",
+            click: async () => {
+              openInMainWindow(FVM_EDITOR_ELECTION_2012);
+            },
+          },
+          {
+            label: "Stick Figure",
+            click: async () => {
+              openInMainWindow(FVM_EDITOR_STICK_FIGURE);
+            },
+          },
+          {
+            label: "Stickly Business",
+            click: async () => {
+              openInMainWindow(FVM_EDITOR_STICKLY_BUSINESS);
+            },
+          },
+          { type: "separator" },
+          {
+            label: "Quick Video Maker",
+            click: async () => {
+              openInMainWindow(QVM_EDITOR_GENERAL);
+            },
+          },
+        ],
+      },
     ];
 
     Menu.setApplicationMenu(Menu.buildFromTemplate(template));
@@ -778,11 +535,6 @@ if (!gotTheLock) {
     win.webContents.on("new-window", (event, targetUrl) => {
       event.preventDefault();
 
-      if (isGoExportSettingsUrl(targetUrl)) {
-        openGoExportSettingsWindow();
-        return;
-      }
-
       if (isFlashThemesUrl(targetUrl)) {
         openInMainWindow(targetUrl);
         return;
@@ -793,12 +545,6 @@ if (!gotTheLock) {
 
     win.webContents.on("will-navigate", (event, targetUrl) => {
       if (targetUrl === win.webContents.getURL()) {
-        return;
-      }
-
-      if (isGoExportSettingsUrl(targetUrl)) {
-        event.preventDefault();
-        openGoExportSettingsWindow();
         return;
       }
 
@@ -819,20 +565,9 @@ if (!gotTheLock) {
         applyEditorViewportFix();
       }
 
-      if (isFlashThemesUrl(currentUrl)) {
-        win.webContents.executeJavaScript(buildGoExportNavbarPatchScript()).catch((error) => {
-          console.error("[DesktopFT] GoExport navbar patch injection failed:", error);
-        });
-      }
-
       if (MOVIE_PATH_PATTERN.test(currentUrl)) {
         win.webContents.executeJavaScript(buildMovieDownloaderPatchScript()).catch((error) => {
           console.error("[DesktopFT] Movie downloader patch injection failed:", error);
-        });
-
-        const goExportSettings = readGoExportSettings();
-        win.webContents.executeJavaScript(buildGoExportMoviePatchScript(goExportSettings)).catch((error) => {
-          console.error("[DesktopFT] GoExport movie patch injection failed:", error);
         });
       }
     };
@@ -906,23 +641,6 @@ if (!gotTheLock) {
 
   app.whenReady().then(() => {
     app.allowRendererProcessReuse = true;
-
-    ipcMain.handle("desktopft:get-goexport-settings", () => {
-      return readGoExportSettings();
-    });
-
-    ipcMain.handle("desktopft:save-goexport-settings", (event, incomingSettings) => {
-      const savedSettings = saveGoExportSettings(incomingSettings);
-
-      if (win && !win.isDestroyed()) {
-        const currentUrl = win.webContents.getURL();
-        if (MOVIE_PATH_PATTERN.test(currentUrl)) {
-          win.webContents.reload();
-        }
-      }
-
-      return savedSettings;
-    });
 
     createMenu();
     createWindow();
