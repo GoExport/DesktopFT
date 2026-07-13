@@ -84,10 +84,12 @@ let QVM_EDITOR_GENERAL = "https://flashthemes.net/create/#quickvideo";
 
 let win;
 let goExportSettingsWin;
+let charactersWin;
 const APP_SESSION_PARTITION = "persist:desktopft";
 const EDITOR_PATH_PATTERN = /\/videomaker\/.+\/full/i;
 const MOVIE_PATH_PATTERN = /\/movie\//i;
 const GOEXPORT_SETTINGS_PROTOCOL = "desktopft-goexport-settings://open";
+const CHARACTERS_URL = "https://chars.malamations.com/";
 
 const GOEXPORT_SETTINGS_FILE = "goexport-settings.json";
 const DEFAULT_GOEXPORT_SETTINGS = {
@@ -238,6 +240,32 @@ const isFlashThemesUrl = (targetUrl) => {
     return (
       (parsed.protocol === "https:" || parsed.protocol === "http:") &&
       (host === "flashthemes.net" || host.endsWith(".flashthemes.net"))
+    );
+  } catch (error) {
+    return false;
+  }
+};
+
+const isCharactersUrl = (targetUrl) => {
+  try {
+    const parsed = new URL(targetUrl);
+    return (
+      (parsed.protocol === "https:" || parsed.protocol === "http:") &&
+      parsed.hostname.toLowerCase() === "chars.malamations.com"
+    );
+  } catch (error) {
+    return false;
+  }
+};
+
+const isFlashThemesCharacterCreatorUrl = (targetUrl) => {
+  try {
+    const parsed = new URL(targetUrl);
+    const host = parsed.hostname.toLowerCase();
+    return (
+      (parsed.protocol === "https:" || parsed.protocol === "http:") &&
+      (host === "flashthemes.net" || host.endsWith(".flashthemes.net")) &&
+      /^\/character\/creator\//i.test(parsed.pathname)
     );
   } catch (error) {
     return false;
@@ -685,6 +713,66 @@ if (!singleInstance.gotTheLock) {
     }
   };
 
+  const openCharactersWindow = () => {
+    if (charactersWin && !charactersWin.isDestroyed()) {
+      charactersWin.focus();
+      return;
+    }
+
+    charactersWin = new BrowserWindow({
+      title: "Characters",
+      width: 1280,
+      height: 900,
+      autoHideMenuBar: true,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        plugins: true,
+        partition: APP_SESSION_PARTITION,
+      },
+    });
+
+    charactersWin.webContents.on("new-window", (event, targetUrl) => {
+      event.preventDefault();
+
+      if (isFlashThemesCharacterCreatorUrl(targetUrl)) {
+        openInMainWindow(targetUrl);
+        return;
+      }
+
+      if (isCharactersUrl(targetUrl)) {
+        charactersWin.loadURL(targetUrl);
+        charactersWin.focus();
+        return;
+      }
+
+      shell.openExternal(targetUrl);
+    });
+
+    charactersWin.webContents.on("will-navigate", (event, targetUrl) => {
+      if (targetUrl === charactersWin.webContents.getURL()) {
+        return;
+      }
+
+      if (isFlashThemesCharacterCreatorUrl(targetUrl)) {
+        event.preventDefault();
+        openInMainWindow(targetUrl);
+        return;
+      }
+
+      if (!isCharactersUrl(targetUrl)) {
+        event.preventDefault();
+        shell.openExternal(targetUrl);
+      }
+    });
+
+    charactersWin.on("closed", () => {
+      charactersWin = null;
+    });
+
+    charactersWin.loadURL(CHARACTERS_URL);
+  };
+
   const createMenu = () => {
     const template = [
       {
@@ -710,6 +798,12 @@ if (!singleInstance.gotTheLock) {
                 label: "Community",
                 click: async () => {
                   win.loadURL(APP_COMMUNITY);
+                },
+              },
+              {
+                label: "Characters",
+                click: async () => {
+                  openCharactersWindow();
                 },
               },
             ],
