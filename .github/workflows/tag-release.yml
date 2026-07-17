@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*.*.*'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -61,10 +62,49 @@ jobs:
           path: out/make/**/*
           if-no-files-found: error
 
+  build-arch:
+    name: Build arch-linux-${{ matrix.arch }}
+    runs-on: ubuntu-22.04
+    container: archlinux:latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - x64
+          - ia32
+
+    steps:
+      - name: Install build dependencies
+        run: pacman -Syu --noconfirm --needed ca-certificates git nodejs npm rpm dpkg fakeroot
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '16'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build distributables
+        run: npx electron-forge make --platform=linux --arch=${{ matrix.arch }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: make-arch-linux-${{ matrix.arch }}
+          path: out/make/**/*
+          if-no-files-found: error
+
   publish:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
-    needs: build
+    if: github.event_name == 'push'
+    needs:
+      - build
+      - build-arch
 
     steps:
       - name: Download artifacts

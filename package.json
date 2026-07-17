@@ -1,7 +1,7 @@
 {
   "name": "FlashThemes",
   "productName": "FlashThemes",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Unofficial desktop client for FlashThemes",
   "main": "src/index.js",
   "scripts": {
@@ -15,8 +15,8 @@
   },
   "keywords": [],
   "author": {
-    "name": "dae",
-    "email": "notGoExport@gmail.com"
+    "name": "Chloe",
+    "email": "dev@lexian.dev"
   },
   "license": "MIT",
   "config": {
