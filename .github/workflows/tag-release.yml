@@ -75,7 +75,7 @@ jobs:
 
     steps:
       - name: Install build dependencies
-        run: pacman -Syu --noconfirm --needed ca-certificates git nodejs npm rpm dpkg fakeroot
+        run: pacman -Syu --noconfirm --needed ca-certificates git nodejs npm yarn rpm dpkg fakeroot
 
       - name: Checkout
         uses: actions/checkout@v4
