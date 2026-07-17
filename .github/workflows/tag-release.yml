@@ -62,10 +62,9 @@ jobs:
           path: out/make/**/*
           if-no-files-found: error
 
-  build-arch:
-    name: Build arch-linux-${{ matrix.arch }}
+  build-linux-generic:
+    name: Build generic-linux-${{ matrix.arch }}
     runs-on: ubuntu-22.04
-    container: archlinux:latest
     strategy:
       fail-fast: false
       matrix:
@@ -74,9 +73,6 @@ jobs:
           - ia32
 
     steps:
-      - name: Install build dependencies
-        run: pacman -Syu --noconfirm --needed ca-certificates git nodejs npm yarn rpm dpkg fakeroot
-
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -84,18 +80,30 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '16'
+          cache: 'npm'
 
       - name: Install dependencies
         run: npm install
 
-      - name: Build distributables
-        run: npx electron-forge make --platform=linux --arch=${{ matrix.arch }} --targets=@electron-forge/maker-deb
+      - name: Package generic Linux application
+        run: npx electron-forge package --platform=linux --arch=${{ matrix.arch }}
+
+      - name: Create generic Linux archive
+        shell: bash
+        run: |
+          package_dir=$(find out -mindepth 1 -maxdepth 1 -type d -name 'FlashThemes-linux-*' -print -quit)
+          if [ -z "$package_dir" ]; then
+            echo "Packaged Linux application directory not found"
+            exit 1
+          fi
+          mkdir -p out/make
+          tar -czf "out/make/FlashThemes-linux-${{ matrix.arch }}.tar.gz" -C out "$(basename "$package_dir")"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: make-arch-linux-${{ matrix.arch }}
-          path: out/make/**/*
+          name: make-linux-generic-${{ matrix.arch }}
+          path: out/make/FlashThemes-linux-${{ matrix.arch }}.tar.gz
           if-no-files-found: error
 
   publish:
@@ -104,7 +112,7 @@ jobs:
     if: github.event_name == 'push'
     needs:
       - build
-      - build-arch
+      - build-linux-generic
 
     steps:
       - name: Download artifacts
