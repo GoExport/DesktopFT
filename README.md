@@ -1,5 +1,11 @@
 ![FlashThemes Desktop Logo](https://github.com/GoExport/DesktopFT/blob/main/src/assets/background.png?raw=true)
 
+![GitHub Repo stars](https://img.shields.io/github/stars/GoExport/DesktopFT?cacheBuster=true)
+![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/GoExport/DesktopFT/total?cacheBuster=true)
+![GitHub License](https://img.shields.io/github/license/GoExport/DesktopFT?cacheBuster=true)
+![GitHub Release](https://img.shields.io/github/v/release/GoExport/DesktopFT?include_prereleases&cacheBuster=true)
+[![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/ejwJYtQDrS)
+
 This is an **unofficial** desktop client for FlashThemes.net
 
 ## Requirement(s)
