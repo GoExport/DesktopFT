@@ -55,6 +55,26 @@ jobs:
       - name: Build distributables
         run: npx electron-forge make --platform=${{ matrix.platform }} --arch=${{ matrix.arch }}
 
+      - name: Make Windows artifact names unique
+        if: matrix.platform == 'win32'
+        shell: pwsh
+        run: |
+          $renamed = @()
+          Get-ChildItem -Path out/make -File -Recurse | ForEach-Object {
+            $oldName = $_.Name
+            $newName = "$($_.BaseName)-${{ matrix.arch }}$($_.Extension)"
+            Rename-Item -LiteralPath $_.FullName -NewName $newName
+            $renamed += [PSCustomObject]@{ OldName = $oldName; NewName = $newName }
+          }
+
+          Get-ChildItem -Path out/make -File -Recurse -Filter '*RELEASES*' | ForEach-Object {
+            $contents = Get-Content -LiteralPath $_.FullName -Raw
+            foreach ($item in $renamed) {
+              $contents = $contents.Replace($item.OldName, $item.NewName)
+            }
+            Set-Content -LiteralPath $_.FullName -Value $contents -NoNewline
+          }
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
