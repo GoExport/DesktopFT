@@ -2,6 +2,12 @@ const { app, BrowserWindow, shell, Menu, ipcMain, session } = require("electron"
 const path = require("path");
 const fs = require("fs");
 
+// Handle Squirrel install, update, and uninstall events before normal app startup.
+// This creates/removes the Start menu shortcut on Windows.
+if (require("electron-squirrel-startup")) {
+  app.quit();
+}
+
 const createSingleInstanceLock = () => {
   if (typeof app.requestSingleInstanceLock === "function") {
     const gotTheLock = app.requestSingleInstanceLock();
