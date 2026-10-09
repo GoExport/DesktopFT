@@ -305,6 +305,16 @@ const buildMovieDownloaderPatchScript = () => `
     return null;
   };
 
+  const normalizeMovieUsername = (username) => {
+    let value = String(username || '').trim();
+    try {
+      value = decodeURIComponent(value);
+    } catch (error) {
+      // Preserve the original value when percent-encoding is malformed.
+    }
+    return value.trim().toLowerCase();
+  };
+
   const gatherMovieData = () => {
     const scripts = document.querySelectorAll('script');
     const movieData = {};
@@ -350,7 +360,7 @@ const buildMovieDownloaderPatchScript = () => `
     const loggedInUser = getLoggedInUsername();
 
     // Match ownership exactly as the site does (case-sensitive and character-sensitive).
-    if (!movieOwner || !loggedInUser || movieOwner !== loggedInUser) {
+    if (!movieOwner || !loggedInUser || normalizeMovieUsername(movieOwner) !== normalizeMovieUsername(loggedInUser)) {
       return;
     }
 
@@ -549,6 +559,16 @@ const buildGoExportMoviePatchScript = (settings) => {
     return null;
   };
 
+  const normalizeMovieUsername = (username) => {
+    let value = String(username || '').trim();
+    try {
+      value = decodeURIComponent(value);
+    } catch (error) {
+      // Preserve the original value when percent-encoding is malformed.
+    }
+    return value.trim().toLowerCase();
+  };
+
   const gatherMovieData = () => {
     const scripts = document.querySelectorAll('script');
     const movieData = {};
@@ -610,8 +630,8 @@ const buildGoExportMoviePatchScript = (settings) => {
       return;
     }
 
-    const normalizedMovieOwner = String(movieOwner).trim().toLowerCase();
-    const normalizedLoggedInUser = String(loggedInUser).trim().toLowerCase();
+    const normalizedMovieOwner = normalizeMovieUsername(movieOwner);
+    const normalizedLoggedInUser = normalizeMovieUsername(loggedInUser);
     if (normalizedMovieOwner !== normalizedLoggedInUser) {
       return;
     }
