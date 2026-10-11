@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
+    />
+    <title>FlashThemes</title>
+    <style>
+      /* Colours are supplied at runtime from the system's menu bar colours (see
+         src/toolbar-theme.js); these defaults match the standard Windows menu bar. */
+      :root {
+        --toolbar-bg: #f0f0f0;
+        --toolbar-fg: #000000;
+        --toolbar-border: #d3d3d3;
+        --button-hover: #dddddd;
+        --button-active: #cecece;
+        --button-disabled: #9c9c9c;
+        --field-bg: #ffffff;
+        --field-fg: #000000;
+        --field-placeholder: #808080;
+        --message-error: #b3261e;
+        --message-info: #1e7b34;
+        --invalid-border: #c62828;
+        /* FlashThemes "FT" logo colours. */
+        --brand-pink: #ec407a;
+        --brand-blue: #298fe8;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: var(--toolbar-bg);
+        color: var(--toolbar-fg);
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        font-size: 13px;
+        user-select: none;
+      }
+
+      .toolbar {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        height: 40px;
+        padding: 0 8px;
+        border-bottom: 1px solid var(--toolbar-border);
+      }
+
+      button {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        width: 30px;
+        height: 30px;
+        padding: 0;
+        border: 0;
+        border-radius: 6px;
+        background: transparent;
+        color: var(--toolbar-fg);
+        cursor: pointer;
+        outline: none;
+      }
+
+      button:hover:not(:disabled) {
+        background: var(--button-hover);
+      }
+
+      button:active:not(:disabled) {
+        background: var(--button-active);
+      }
+
+      button:focus {
+        box-shadow: 0 0 0 2px var(--brand-blue);
+      }
+
+      button:disabled {
+        color: var(--button-disabled);
+        cursor: default;
+      }
+
+      svg {
+        width: 18px;
+        height: 18px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .hidden {
+        display: none;
+      }
+
+      .address {
+        position: relative;
+        display: flex;
+        align-items: center;
+        flex: 1 1 auto;
+        min-width: 120px;
+        height: 30px;
+        margin: 0 4px;
+        /* Pink-to-blue gradient border taken from the FlashThemes "FT" logo. */
+        border: 1px solid transparent;
+        border-radius: 15px;
+        background: linear-gradient(var(--field-bg), var(--field-bg)) padding-box,
+          linear-gradient(90deg, rgba(236, 64, 122, 0.7), rgba(41, 143, 232, 0.7)) border-box;
+      }
+
+      .address:focus-within {
+        border-width: 2px;
+        background: linear-gradient(var(--field-bg), var(--field-bg)) padding-box,
+          linear-gradient(90deg, var(--brand-pink), var(--brand-blue)) border-box;
+        box-shadow: -4px 0 10px -3px rgba(236, 64, 122, 0.5), 4px 0 10px -3px rgba(41, 143, 232, 0.5);
+      }
+
+      .address.invalid {
+        background: linear-gradient(var(--field-bg), var(--field-bg)) padding-box,
+          linear-gradient(var(--invalid-border), var(--invalid-border)) border-box;
+        box-shadow: none;
+      }
+
+      .address input {
+        flex: 1 1 auto;
+        min-width: 0;
+        height: 100%;
+        padding: 0 14px;
+        border: 0;
+        background: transparent;
+        color: var(--field-fg);
+        caret-color: var(--brand-blue);
+        font: inherit;
+        outline: none;
+        user-select: text;
+      }
+
+      .address input::placeholder {
+        color: var(--field-placeholder);
+      }
+
+      .address input::selection {
+        background: rgba(236, 64, 122, 0.6);
+        color: #fff;
+      }
+
+      .address:focus-within input {
+        padding: 0 13px;
+      }
+
+      .address .message {
+        flex: 0 1 auto;
+        overflow: hidden;
+        padding-right: 14px;
+        color: var(--message-error);
+        font-size: 12px;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+
+      .address .message.info {
+        color: var(--message-info);
+      }
+
+      .badge {
+        position: absolute;
+        top: 5px;
+        right: 5px;
+        width: 8px;
+        height: 8px;
+        border: 2px solid var(--toolbar-bg);
+        border-radius: 50%;
+        background: var(--brand-pink);
+        box-sizing: content-box;
+      }
+
+      #updates.has-update {
+        color: var(--brand-pink);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="toolbar" role="toolbar" aria-label="Navigation">
+      <button id="back" title="Back (Alt+Left)" aria-label="Back" disabled>
+        <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" /></svg>
+      </button>
+      <button id="forward" title="Forward (Alt+Right)" aria-label="Forward" disabled>
+        <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" /></svg>
+      </button>
+      <button id="reload" title="Reload (Ctrl+R)" aria-label="Reload">
+        <svg id="reload-icon" viewBox="0 0 24 24">
+          <path d="M20 11a8 8 0 1 0-2.3 5.7" />
+          <path d="M20 4v7h-7" />
+        </svg>
+        <svg id="stop-icon" class="hidden" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg>
+      </button>
+
+      <div class="address" id="address-box">
+        <input
+          id="address"
+          type="text"
+          spellcheck="false"
+          autocomplete="off"
+          aria-label="Address (Ctrl+L)"
+          placeholder="Enter a FlashThemes address"
+        />
+        <span class="message hidden" id="address-message" role="status"></span>
+      </div>
+
+      <button id="home" title="FlashThemes Home" aria-label="Home">
+        <svg viewBox="0 0 24 24">
+          <path d="M3 11l9-7 9 7" />
+          <path d="M5 10v10h5v-6h4v6h5V10" />
+        </svg>
+      </button>
+      <button id="updates" title="Check for updates" aria-label="Check for updates">
+        <svg viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 16V8" />
+          <path d="M8.5 11.5L12 8l3.5 3.5" />
+        </svg>
+        <span class="badge hidden" id="update-badge"></span>
+      </button>
+    </div>
+
+    <script src="toolbar.js"></script>
+  </body>
+</html>

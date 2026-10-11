@@ -1,6 +1,9 @@
-const { app, BrowserWindow, shell, Menu, ipcMain, session } = require("electron");
+const { app, BrowserWindow, Menu, ipcMain, session } = require("electron");
 const path = require("path");
 const fs = require("fs");
+const { isFlashThemesUrl } = require("./navigation-policy");
+const { createNavigation, openExternalSafely, TOOLBAR_PRELOAD } = require("./navigation");
+const { createUpdateNotifier } = require("./update-notifier");
 
 // Handle Squirrel install, update, and uninstall events before normal app startup.
 // This creates/removes the Start menu shortcut on Windows.
@@ -89,6 +92,8 @@ let FVM_EDITOR_STICKLY_BUSINESS = "https://flashthemes.net/videomaker/sticklybiz
 let QVM_EDITOR_GENERAL = "https://flashthemes.net/create/#quickvideo";
 
 let win;
+let navigation;
+let updateNotifier;
 let goExportSettingsWin;
 let charactersWin;
 const APP_SESSION_PARTITION = "persist:desktopft";
@@ -119,6 +124,9 @@ try {
 } catch (error) {
   console.warn("[DesktopFT] Failed to set custom userData path:", error);
 }
+
+// The FlashThemes page runs in the navigation BrowserView, not in win.webContents (the toolbar).
+const getSiteContents = () => (win && !win.isDestroyed() && navigation ? navigation.getSiteContents() : null);
 
 const getGoExportSettingsPath = () => path.join(app.getPath("userData"), GOEXPORT_SETTINGS_FILE);
 
@@ -183,14 +191,15 @@ const registerGoExportIpc = () => {
     try {
       const data = writeGoExportSettings(request.payload || {});
 
-      if (win && !win.isDestroyed() && MOVIE_PATH_PATTERN.test(win.webContents.getURL())) {
-        win.webContents.executeJavaScript("var button = document.getElementById('goexport_integration_button'); if (button) { button.remove(); }").catch(() => {});
-        win.webContents.executeJavaScript(buildGoExportMoviePatchScript(data)).catch((error) => {
+      const siteContents = getSiteContents();
+      if (siteContents && MOVIE_PATH_PATTERN.test(siteContents.getURL())) {
+        siteContents.executeJavaScript("var button = document.getElementById('goexport_integration_button'); if (button) { button.remove(); }").catch(() => {});
+        siteContents.executeJavaScript(buildGoExportMoviePatchScript(data)).catch((error) => {
           console.error("[DesktopFT] GoExport movie patch refresh failed:", error);
         });
 
         // Keep movie-page UI in sync after saving settings.
-        win.reload();
+        siteContents.reload();
       }
 
       event.sender.send(responseChannel, {
@@ -237,19 +246,6 @@ const openGoExportSettingsWindow = () => {
   goExportSettingsWin.on("closed", () => {
     goExportSettingsWin = null;
   });
-};
-
-const isFlashThemesUrl = (targetUrl) => {
-  try {
-    const parsed = new URL(targetUrl);
-    const host = parsed.hostname.toLowerCase();
-    return (
-      (parsed.protocol === "https:" || parsed.protocol === "http:") &&
-      (host === "flashthemes.net" || host.endsWith(".flashthemes.net"))
-    );
-  } catch (error) {
-    return false;
-  }
 };
 
 const isCharactersUrl = (targetUrl) => {
@@ -720,11 +716,12 @@ const buildEditorViewportFixScript = () => `
 `;
 
 const applyEditorViewportFix = () => {
-  if (!win || win.isDestroyed()) {
+  const siteContents = getSiteContents();
+  if (!siteContents) {
     return;
   }
 
-  win.webContents.executeJavaScript(buildEditorViewportFixScript()).catch((error) => {
+  siteContents.executeJavaScript(buildEditorViewportFixScript()).catch((error) => {
     console.error("[DesktopFT] Editor viewport fix injection failed:", error);
   });
 };
@@ -733,11 +730,27 @@ if (!singleInstance.gotTheLock) {
   app.quit();
 } else {
   const openInMainWindow = async (url) => {
-    if (win && !win.isDestroyed()) {
-      win.loadURL(url);
+    if (win && !win.isDestroyed() && navigation && navigation.loadUrl(url)) {
       win.focus();
     }
   };
+
+  const withSiteContents = (callback) => () => {
+    const siteContents = getSiteContents();
+    if (siteContents) {
+      callback(siteContents);
+    }
+  };
+
+  const adjustSiteZoom = (delta) =>
+    withSiteContents((siteContents) => {
+      if (delta === 0) {
+        siteContents.setZoomLevel(0);
+        return;
+      }
+      // Electron 4 reports the zoom level through a callback.
+      siteContents.getZoomLevel((level) => siteContents.setZoomLevel(level + delta));
+    });
 
   const openCharactersWindow = () => {
     if (charactersWin && !charactersWin.isDestroyed()) {
@@ -772,7 +785,7 @@ if (!singleInstance.gotTheLock) {
         return;
       }
 
-      shell.openExternal(targetUrl);
+      openExternalSafely(targetUrl);
     });
 
     charactersWin.webContents.on("will-navigate", (event, targetUrl) => {
@@ -788,7 +801,7 @@ if (!singleInstance.gotTheLock) {
 
       if (!isCharactersUrl(targetUrl)) {
         event.preventDefault();
-        shell.openExternal(targetUrl);
+        openExternalSafely(targetUrl);
       }
     });
 
@@ -807,7 +820,7 @@ if (!singleInstance.gotTheLock) {
           {
             label: "Home",
             click: async () => {
-              win.loadURL(APP_URL);
+              openInMainWindow(APP_URL);
             },
           },
           { type: "separator" },
@@ -817,13 +830,13 @@ if (!singleInstance.gotTheLock) {
               {
                 label: "Animations",
                 click: async () => {
-                  win.loadURL(APP_ANIMATIONS);
+                  openInMainWindow(APP_ANIMATIONS);
                 },
               },
               {
                 label: "Community",
                 click: async () => {
-                  win.loadURL(APP_COMMUNITY);
+                  openInMainWindow(APP_COMMUNITY);
                 },
               },
               {
@@ -837,7 +850,7 @@ if (!singleInstance.gotTheLock) {
           {
             label: "Shop",
             click: async () => {
-              win.loadURL(APP_SHOP);
+              openInMainWindow(APP_SHOP);
             },
           },
         ],
@@ -848,49 +861,49 @@ if (!singleInstance.gotTheLock) {
           {
             label: "Home",
             click: async () => {
-              win.loadURL(APP_HOME);
+              openInMainWindow(APP_HOME);
             },
           },
           {
             label: "Videos",
             click: async () => {
-              win.loadURL(APP_VIDEOS);
+              openInMainWindow(APP_VIDEOS);
             },
           },
           {
             label: "Badges",
             click: async () => {
-              win.loadURL(APP_BADGES);
+              openInMainWindow(APP_BADGES);
             },
           },
           {
             label: "Friends",
             click: async () => {
-              win.loadURL(APP_FRIENDS);
+              openInMainWindow(APP_FRIENDS);
             },
           },
           {
             label: "Messages",
             click: async () => {
-              win.loadURL(APP_MESSAGES);
+              openInMainWindow(APP_MESSAGES);
             },
           },
           {
             label: "Settings",
             click: async () => {
-              win.loadURL(APP_SETTINGS);
+              openInMainWindow(APP_SETTINGS);
             },
           },
           {
             label: "Logo",
             click: async () => {
-              win.loadURL(APP_LOGO);
+              openInMainWindow(APP_LOGO);
             },
           },
           {
             label: "Assets",
             click: async () => {
-              win.loadURL(APP_ASSETS);
+              openInMainWindow(APP_ASSETS);
             },
           },
         ],
@@ -999,19 +1012,37 @@ if (!singleInstance.gotTheLock) {
         label: "View",
         submenu: [
           {
+            label: "Back",
+            accelerator: "Alt+Left",
+            click: () => navigation && navigation.goBack(),
+          },
+          {
+            label: "Forward",
+            accelerator: "Alt+Right",
+            click: () => navigation && navigation.goForward(),
+          },
+          {
+            label: "Open Address",
+            accelerator: "Ctrl+L",
+            click: () => navigation && navigation.focusAddressBar(),
+          },
+          { type: "separator" },
+          // Explicit handlers instead of roles: roles act on the focused webContents, which
+          // may be the toolbar rather than the FlashThemes page.
+          {
             label: "Zoom In",
             accelerator: "Ctrl+=",
-            role: "zoomIn",
+            click: adjustSiteZoom(0.5),
           },
           {
             label: "Zoom Out",
             accelerator: "Ctrl+-",
-            role: "zoomOut",
+            click: adjustSiteZoom(-0.5),
           },
           {
             label: "Actual Size",
             accelerator: "Ctrl+0",
-            role: "resetZoom",
+            click: adjustSiteZoom(0),
           },
         ],
       },
@@ -1028,27 +1059,32 @@ if (!singleInstance.gotTheLock) {
           {
             label: "Toggle DevTools",
             accelerator: "F12",
-            click: () => {
-              if (win && !win.isDestroyed()) {
-                win.webContents.toggleDevTools();
-              }
-            },
+            click: withSiteContents((siteContents) => siteContents.toggleDevTools()),
           },
           {
             label: "Open DevTools (Detached)",
             accelerator: "Ctrl+Shift+I",
-            click: () => {
-              if (win && !win.isDestroyed()) {
-                win.webContents.openDevTools({ mode: "detach" });
-              }
-            },
+            click: withSiteContents((siteContents) => siteContents.openDevTools({ mode: "detach" })),
           },
           { type: "separator" },
           {
-            role: "reload",
+            label: "Reload",
+            accelerator: "CmdOrCtrl+R",
+            click: () => navigation && navigation.reload(false),
           },
           {
-            role: "forceReload",
+            label: "Force Reload",
+            accelerator: "Shift+CmdOrCtrl+R",
+            click: () => navigation && navigation.reload(true),
+          },
+        ],
+      },
+      {
+        label: "Help",
+        submenu: [
+          {
+            label: "Check for Updates...",
+            click: () => updateNotifier && updateNotifier.checkManually(),
           },
         ],
       },
@@ -1058,10 +1094,27 @@ if (!singleInstance.gotTheLock) {
   };
 
   const createWindow = () => {
+    // win.webContents hosts the local navigation toolbar. Its preload exposes a narrow IPC
+    // API; Electron 4 has no contextBridge, so context isolation is off for this local page
+    // only. Remote FlashThemes content runs in the BrowserView created by createNavigation.
     win = new BrowserWindow({
       title: APP_NAME,
       icon: "/build/icon.ico",
       autoHideMenuBar: false,
+      backgroundColor: "#1f1f1f",
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: false,
+        plugins: false,
+        preload: TOOLBAR_PRELOAD,
+      },
+    });
+
+    navigation = createNavigation({
+      win,
+      homeUrl: APP_URL,
+      isEditorUrl: (targetUrl) => EDITOR_PATH_PATTERN.test(targetUrl),
+      onUpdateButton: () => updateNotifier && updateNotifier.openNotification(),
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -1069,8 +1122,9 @@ if (!singleInstance.gotTheLock) {
         partition: APP_SESSION_PARTITION,
       },
     });
+    const siteContents = navigation.getSiteContents();
 
-    win.webContents.on("new-window", (event, targetUrl) => {
+    siteContents.on("new-window", (event, targetUrl) => {
       event.preventDefault();
 
       if (isGoExportSettingsUrl(targetUrl)) {
@@ -1083,11 +1137,11 @@ if (!singleInstance.gotTheLock) {
         return;
       }
 
-      shell.openExternal(targetUrl);
+      openExternalSafely(targetUrl);
     });
 
-    win.webContents.on("will-navigate", (event, targetUrl) => {
-      if (targetUrl === win.webContents.getURL()) {
+    siteContents.on("will-navigate", (event, targetUrl) => {
+      if (targetUrl === siteContents.getURL()) {
         return;
       }
 
@@ -1099,48 +1153,58 @@ if (!singleInstance.gotTheLock) {
 
       if (!isFlashThemesUrl(targetUrl)) {
         event.preventDefault();
-        shell.openExternal(targetUrl);
+        openExternalSafely(targetUrl);
       }
     });
 
-    win.webContents.on("will-prevent-unload", (event) => {
+    siteContents.on("will-prevent-unload", (event) => {
       // Legacy editor sets beforeunload; allow leaving when app navigation requests it.
       event.preventDefault();
     });
 
     const patchPageEnhancementsIfNeeded = () => {
-      const currentUrl = win.webContents.getURL();
+      if (siteContents.isDestroyed()) {
+        return;
+      }
+
+      const currentUrl = siteContents.getURL();
       if (EDITOR_PATH_PATTERN.test(currentUrl)) {
         applyEditorViewportFix();
       }
 
       if (isFlashThemesUrl(currentUrl)) {
-        win.webContents.executeJavaScript(buildGoExportNavbarPatchScript()).catch((error) => {
+        siteContents.executeJavaScript(buildGoExportNavbarPatchScript()).catch((error) => {
           console.error("[DesktopFT] GoExport navbar patch injection failed:", error);
         });
       }
 
       if (MOVIE_PATH_PATTERN.test(currentUrl)) {
-        win.webContents.executeJavaScript(buildMovieDownloaderPatchScript()).catch((error) => {
+        siteContents.executeJavaScript(buildMovieDownloaderPatchScript()).catch((error) => {
           console.error("[DesktopFT] Movie downloader patch injection failed:", error);
         });
 
         const goExportSettings = readGoExportSettings();
-        win.webContents.executeJavaScript(buildGoExportMoviePatchScript(goExportSettings)).catch((error) => {
+        siteContents.executeJavaScript(buildGoExportMoviePatchScript(goExportSettings)).catch((error) => {
           console.error("[DesktopFT] GoExport movie patch injection failed:", error);
         });
       }
     };
 
-    win.webContents.on("did-finish-load", patchPageEnhancementsIfNeeded);
-    win.webContents.on("dom-ready", patchPageEnhancementsIfNeeded);
+    siteContents.on("did-finish-load", patchPageEnhancementsIfNeeded);
+    siteContents.on("dom-ready", patchPageEnhancementsIfNeeded);
 
-    win.webContents.on("context-menu", (event, params) => {
-      Menu.getApplicationMenu().popup(win, params.x, params.y);
+    siteContents.on("context-menu", (event, params) => {
+      // Page coordinates are relative to the BrowserView, which sits below the toolbar.
+      Menu.getApplicationMenu().popup({
+        window: win,
+        x: params.x,
+        y: params.y + navigation.getContentOffsetY(),
+      });
     });
 
     win.maximize();
-    win.loadURL(APP_URL);
+    navigation.loadUrl(APP_URL);
+    siteContents.once("did-finish-load", () => navigation && navigation.focusSite());
 
     win.once("page-title-updated", function (event, title) {
       event.preventDefault();
@@ -1198,6 +1262,10 @@ if (!singleInstance.gotTheLock) {
   });
 
   app.on("before-quit", () => {
+    if (updateNotifier) {
+      updateNotifier.stop();
+    }
+
     const appSession = session.fromPartition(APP_SESSION_PARTITION);
 
     try {
@@ -1222,6 +1290,12 @@ if (!singleInstance.gotTheLock) {
     createWindow();
 
     win.setIcon(path.join(__dirname, "/assets/", APP_ICON));
+
+    updateNotifier = createUpdateNotifier({
+      getWindow: () => win,
+      setIndicator: (indicator) => navigation && navigation.setUpdateIndicator(indicator),
+    });
+    updateNotifier.start();
 
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();

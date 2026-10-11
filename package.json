@@ -1,7 +1,7 @@
 {
   "name": "FlashThemes",
   "productName": "FlashThemes",
-  "version": "1.0.9",
+  "version": "1.1.0",
   "description": "Unofficial desktop client for FlashThemes",
   "main": "src/index.js",
   "scripts": {
@@ -11,6 +11,7 @@
     "make64": "electron-forge make",
     "make32": "electron-forge make --arch=ia32",
     "publish": "electron-forge publish",
+    "test": "node test/run.js",
     "lint": "echo \"No linting configured\""
   },
   "keywords": [],

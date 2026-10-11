@@ -27,8 +27,20 @@ yarn
 ## Package and distribute your application
 Run the `build_win32.bat` or `build_win64.bat` in **commands** folder to build your application.
 
+## Navigation and updates
+- The toolbar above the page has Back, Forward, Reload, an address bar, Home, and an update indicator.
+- `Ctrl+L` focuses the address bar; `Alt+Left` / `Alt+Right` go back and forward.
+- Only `flashthemes.net` (and its subdomains) open inside DesktopFT. Other web links open in your default browser, and other protocols are refused.
+- The toolbar hides itself in the Flash video editor; press `Ctrl+L` to bring it back while typing an address.
+- DesktopFT checks [GitHub Releases](https://github.com/GoExport/DesktopFT/releases) at launch and every six hours, and from **Help → Check for Updates**. It only notifies you; it never downloads or installs anything.
+
 ## Testing
 Run application in development mode:
 ```bash
 yarn start
+```
+
+Run the unit tests (URL policy and update checks):
+```bash
+npm test
 ```
